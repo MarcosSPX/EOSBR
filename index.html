@@ -6,26 +6,23 @@
     <title>SISTEMA EOS-BR | DASHBOARD OPERACIONAL</title>
 
     <!-- Fontes e Ícones Profissionais -->
-    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
     
-    <!-- Bibliotecas de Visualização -->
+    <!-- Chart.js para Alta Performance -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0"></script>
 
     <style>
-        /* ==========================================================================
-           1. VARIÁVEIS DE AMBIENTE (PADRONIZAÇÃO)
-           ========================================================================== */
         :root {
-            --bg-deep: #05070a;
-            --bg-card: #0d1117;
-            --bg-input: #161b22;
+            --bg: #05070a;
+            --card: #0d1117;
+            --input: #161b22;
             --primary: #ee4d2d;
             --primary-glow: rgba(238, 77, 45, 0.15);
-            --text-main: #f0f6fc;
-            --text-dim: #8b949e;
             --border: #30363d;
+            --text: #f0f6fc;
+            --text-dim: #8b949e;
             
             --blue: #2f81f7;
             --green: #3fb950;
@@ -33,748 +30,425 @@
             --yellow: #d29922;
             --cyan: #39c5cf;
             
-            --font-main: 'Plus Jakarta Sans', sans-serif;
-            --font-mono: 'JetBrains Mono', monospace;
-            
-            --radius: 10px;
-            --gap: 15px;
-            --header-h: 55px;
-            --filter-h: 40px;
+            --header-h: 60px;
         }
 
-        /* ==========================================================================
-           2. RESET E ESTILOS BASE
-           ========================================================================== */
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            outline: none;
-        }
-
+        * { margin: 0; padding: 0; box-sizing: border-box; outline: none; }
+        
         body {
-            background-color: var(--bg-deep);
-            color: var(--text-main);
-            font-family: var(--font-main);
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Plus Jakarta Sans', sans-serif;
             font-size: 13px;
             line-height: 1.5;
             overflow-x: hidden;
         }
 
-        /* Scrollbar Profissional */
-        ::-webkit-scrollbar { width: 6px; height: 6px; }
-        ::-webkit-scrollbar-track { background: var(--bg-deep); }
-        ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 10px; }
-        ::-webkit-scrollbar-thumb:hover { background: var(--primary); }
+        /* Layout Grid Principal */
+        .app-container {
+            display: grid;
+            grid-template-areas: 
+                "header"
+                "filters"
+                "kpis"
+                "charts"
+                "heatmap"
+                "table";
+            gap: 15px;
+            padding: 0 25px 25px 25px;
+            max-width: 1800px;
+            margin: 0 auto;
+        }
 
-        .hidden { display: none !important; }
-
-        /* ==========================================================================
-           3. ESTRUTURA HEADER
-           ========================================================================== */
+        /* Componentes */
         header {
-            background: rgba(13, 17, 23, 0.95);
-            backdrop-filter: blur(12px);
-            border-bottom: 1px solid var(--border);
+            grid-area: header;
             height: var(--header-h);
-            padding: 0 25px;
             display: flex;
             align-items: center;
             justify-content: space-between;
-            position: sticky;
-            top: 0;
-            z-index: 1000;
+            border-bottom: 1px solid var(--border);
+            margin-bottom: 10px;
         }
 
-        .header-brand { display: flex; align-items: center; gap: 12px; }
-        .shopee-logo {
-            background: var(--primary);
-            color: white;
-            padding: 4px 8px;
-            border-radius: 4px;
-            font-weight: 900;
-            font-size: 14px;
-            box-shadow: 0 0 15px var(--primary-glow);
-        }
-        .header-title { font-weight: 800; font-size: 15px; letter-spacing: -0.3px; }
-        .header-title span { color: var(--primary); }
-
-        .header-info { display: flex; align-items: center; gap: 20px; }
-        .clock-display { font-family: var(--font-mono); color: var(--primary); font-weight: 600; font-size: 14px; }
-        .status-pill {
-            background: rgba(63, 185, 80, 0.1);
-            color: var(--green);
-            padding: 4px 12px;
-            border-radius: 20px;
-            font-size: 11px;
-            font-weight: 800;
-            text-transform: uppercase;
-            border: 1px solid rgba(63, 185, 80, 0.2);
-        }
-
-        /* ==========================================================================
-           4. MAIN CONTENT & FILTROS
-           ========================================================================== */
-        main {
-            padding: var(--gap) 25px;
-            display: flex;
-            flex-direction: column;
-            gap: var(--gap);
-        }
-
-        .section-filters {
-            background: var(--bg-card);
+        .filters-area {
+            grid-area: filters;
+            background: var(--card);
+            padding: 15px;
+            border-radius: 12px;
             border: 1px solid var(--border);
-            padding: 12px 15px;
-            border-radius: var(--radius);
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-            gap: 10px;
-            align-items: center;
+            gap: 12px;
         }
 
-        .filter-item { display: flex; flex-direction: column; gap: 4px; }
-        
-        select {
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            color: var(--text-main);
-            height: var(--filter-h);
-            padding: 0 12px;
-            border-radius: 6px;
-            font-size: 12px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.2s;
-            width: 100%;
-        }
-
-        select:hover { border-color: var(--primary); }
-        select:focus { border-color: var(--primary); box-shadow: 0 0 0 2px var(--primary-glow); }
-
-        .btn-mode {
-            background: linear-gradient(135deg, var(--primary), #ff8c00) !important;
-            color: white !important;
-            font-weight: 800 !important;
-            border: none !important;
-            text-shadow: 0 1px 2px rgba(0,0,0,0.3);
-        }
-
-        /* ==========================================================================
-           5. KPI GRID (CARDS PADRONIZADOS)
-           ========================================================================== */
         .kpi-grid {
+            grid-area: kpis;
             display: grid;
             grid-template-columns: repeat(4, 1fr);
-            gap: var(--gap);
+            gap: 15px;
         }
 
-        .kpi-card {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            padding: 20px;
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            transition: transform 0.2s;
-        }
-
-        .kpi-card:hover { transform: translateY(-3px); border-color: var(--text-dim); }
-
-        .kpi-data { display: flex; flex-direction: column; }
-        .kpi-label { font-size: 11px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; margin-bottom: 5px; }
-        .kpi-value { font-size: 26px; font-weight: 800; line-height: 1; }
-
-        .kpi-icon {
-            width: 45px;
-            height: 45px;
-            background: var(--bg-input);
-            border-radius: 8px;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            font-size: 18px;
-            color: var(--primary);
-            border: 1px solid var(--border);
-        }
-
-        .kpi-card.idle-active { border-color: var(--cyan); background: linear-gradient(145deg, rgba(57,197,207,0.05), var(--bg-card)); }
-        .kpi-card.idle-active .kpi-value { color: var(--cyan); }
-        .kpi-card.idle-active .kpi-icon { color: var(--cyan); border-color: var(--cyan); }
-
-        /* ==========================================================================
-           6. ÁREA DE GRÁFICOS
-           ========================================================================== */
         .charts-grid {
+            grid-area: charts;
             display: grid;
-            grid-template-columns: repeat(12, 1fr);
-            gap: var(--gap);
+            grid-template-columns: repeat(3, 1fr);
+            gap: 15px;
         }
 
-        .chart-box {
-            background: var(--bg-card);
+        .section-heatmap { grid-area: heatmap; }
+        .section-table { grid-area: table; }
+
+        /* Estilização Cards */
+        .card {
+            background: var(--card);
             border: 1px solid var(--border);
-            border-radius: var(--radius);
+            border-radius: 12px;
             padding: 20px;
-            min-height: 320px;
-            display: flex;
-            flex-direction: column;
+            transition: all 0.2s ease;
         }
 
-        .span-4 { grid-column: span 4; }
-        .span-12 { grid-column: span 12; }
+        .kpi-card { display: flex; justify-content: space-between; align-items: center; }
+        .kpi-data span { font-size: 11px; color: var(--text-dim); font-weight: 700; text-transform: uppercase; }
+        .kpi-data h2 { font-size: 28px; font-weight: 800; font-family: 'JetBrains Mono', monospace; }
 
-        .chart-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            margin-bottom: 20px;
+        .icon-box {
+            width: 45px; height: 45px; border-radius: 10px;
+            display: flex; align-items: center; justify-content: center;
+            background: var(--input); font-size: 18px; border: 1px solid var(--border);
         }
 
-        .chart-title { font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px; }
-        .chart-title i { color: var(--primary); }
-
-        .chart-body { flex: 1; position: relative; }
-
-        /* ==========================================================================
-           7. HEATMAP PADRONIZADO
-           ========================================================================== */
-        .heatmap-container {
-            width: 100%;
-            overflow-x: auto;
-            padding: 10px 0;
-        }
-
-        .heatmap-table {
-            display: grid;
-            grid-template-columns: 100px repeat(7, 1fr);
-            gap: 6px;
-            min-width: 900px;
-        }
-
-        .hm-header {
-            text-align: center;
-            font-size: 11px;
-            font-weight: 800;
-            color: var(--text-dim);
-            padding-bottom: 10px;
-            text-transform: uppercase;
-        }
-
-        .hm-row-label {
-            font-weight: 800;
-            font-size: 12px;
-            color: var(--blue);
-            display: flex;
-            align-items: center;
-            background: var(--bg-input);
-            padding: 0 10px;
-            border-radius: 4px;
-        }
-
-        .hm-cell {
-            background: var(--bg-input);
-            height: 50px;
-            border-radius: 6px;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            font-weight: 800;
-            font-size: 16px;
-            transition: all 0.2s;
-            border: 1px solid transparent;
-        }
-
-        .hm-cell:hover { border-color: var(--text-main); transform: scale(1.02); z-index: 10; cursor: pointer; }
-
-        /* ==========================================================================
-           8. HISTÓRICO DE REGISTROS (TABELA)
-           ========================================================================== */
-        .section-table {
-            background: var(--bg-card);
-            border: 1px solid var(--border);
-            border-radius: var(--radius);
-            overflow: hidden;
-        }
-
-        .table-header {
-            padding: 20px;
-            border-bottom: 1px solid var(--border);
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .table-title { font-weight: 800; font-size: 14px; }
-
-        .search-box {
-            position: relative;
-            width: 300px;
-        }
-
-        .search-box i {
-            position: absolute;
-            left: 12px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: var(--text-dim);
-        }
-
-        .search-box input {
-            background: var(--bg-input);
-            border: 1px solid var(--border);
-            color: white;
-            padding: 8px 12px 8px 38px;
-            border-radius: 8px;
-            width: 100%;
-            font-size: 12px;
-        }
-
+        /* Tabela */
         .table-wrapper {
-            max-height: 450px;
+            max-height: 500px;
             overflow-y: auto;
+            border-radius: 8px;
+            border: 1px solid var(--border);
         }
 
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            text-align: left;
-        }
-
+        table { width: 100%; border-collapse: collapse; text-align: left; }
         thead th {
-            background: var(--bg-input);
-            padding: 15px 20px;
-            font-size: 11px;
-            text-transform: uppercase;
-            color: var(--text-dim);
-            font-weight: 800;
-            position: sticky;
-            top: 0;
+            position: sticky; top: 0; background: #161b22;
+            padding: 12px 15px; font-size: 11px; color: var(--text-dim);
+            text-transform: uppercase; border-bottom: 1px solid var(--border);
             z-index: 10;
-            border-bottom: 1px solid var(--border);
         }
-
-        tbody td {
-            padding: 14px 20px;
-            border-bottom: 1px solid var(--border);
-            font-size: 12px;
-        }
-
-        tbody tr:nth-child(even) { background: rgba(255,255,255,0.02); }
+        tbody td { padding: 12px 15px; border-bottom: 1px solid var(--border); font-size: 12px; }
         tbody tr:hover { background: rgba(238, 77, 45, 0.05); }
 
-        /* ==========================================================================
-           9. OVERLAYS E RESPONSIVIDADE
-           ========================================================================== */
-        .overlay {
-            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
-            background: var(--bg-deep); display: flex; flex-direction: column;
-            align-items: center; justify-content: center; z-index: 9999;
+        /* Filtros */
+        select, input {
+            background: var(--input); border: 1px solid var(--border);
+            color: white; padding: 10px; border-radius: 6px; width: 100%;
+            cursor: pointer; font-weight: 600;
         }
 
-        .loader {
-            width: 50px; height: 50px; border: 4px solid var(--border);
-            border-top: 4px solid var(--primary); border-radius: 50%;
-            animation: spin 1s linear infinite; margin-bottom: 20px;
+        /* Heatmap */
+        .hm-grid {
+            display: grid;
+            grid-template-columns: 100px repeat(7, 1fr);
+            gap: 5px; margin-top: 15px;
+        }
+        .hm-cell {
+            height: 45px; border-radius: 4px; background: var(--input);
+            display: flex; align-items: center; justify-content: center;
+            font-weight: 800; font-size: 14px; transition: 0.2s;
         }
 
-        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        /* Loader */
+        #loader {
+            position: fixed; top:0; left:0; width:100%; height:100%;
+            background: var(--bg); display:flex; flex-direction:column;
+            align-items:center; justify-content:center; z-index:9999;
+        }
+        .spinner { width: 40px; height: 40px; border: 4px solid var(--border); border-top-color: var(--primary); border-radius: 50%; animation: spin 1s infinite linear; }
+        @keyframes spin { to { transform: rotate(360deg); } }
 
         @media (max-width: 1200px) {
             .kpi-grid { grid-template-columns: repeat(2, 1fr); }
-            .charts-grid .span-4 { grid-column: span 6; }
-        }
-
-        @media (max-width: 768px) {
-            .kpi-grid { grid-template-columns: 1fr; }
-            .charts-grid .span-4, .span-6 { grid-column: span 12; }
-            .header-info { display: none; }
-            .search-box { width: 100%; }
-            .table-header { flex-direction: column; gap: 15px; }
-        }
-
-        /* Footer */
-        footer {
-            padding: 30px;
-            text-align: center;
-            color: var(--text-dim);
-            font-size: 11px;
+            .charts-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
 
-    <!-- Overlay de Carregamento -->
-    <div id="loadingOverlay" class="overlay">
-        <div class="loader"></div>
-        <h2 style="font-weight: 800;">CONECTANDO À EOS-BR...</h2>
-        <p style="color: var(--text-dim); margin-top: 8px;">Sincronizando dados analíticos em tempo real</p>
+    <div id="loader">
+        <div class="spinner"></div>
+        <p style="margin-top: 15px; font-weight: 700; letter-spacing: 1px;">CARREGANDO REGISTROS EOS-BR...</p>
     </div>
 
-    <!-- Header -->
-    <header>
-        <div class="header-brand">
-            <div class="shopee-logo">S</div>
-            <div class="header-title">CONTROLE ANALÍTICO <span>EOS-BR</span></div>
-        </div>
-        <div class="header-info">
-            <div id="statusBadge" class="status-pill">BASE ATIVA</div>
-            <div id="clockDisplay" class="clock-display">00:00:00</div>
-        </div>
-    </header>
+    <div class="app-container">
+        <header>
+            <div style="display: flex; align-items: center; gap: 15px;">
+                <div style="background: var(--primary); color:white; padding: 5px 12px; border-radius: 6px; font-weight: 900; font-size: 20px;">S</div>
+                <h1 style="font-size: 20px; font-weight: 800;">CONTROLE ANALÍTICO <span style="color:var(--primary)">EOS-BR</span></h1>
+            </div>
+            <div style="text-align: right;">
+                <div id="clock" style="font-family: 'JetBrains Mono'; font-size: 18px; color: var(--primary);">00:00:00</div>
+                <div style="font-size: 10px; color: var(--green); font-weight: 800;"><i class="fas fa-circle"></i> BASE OPERACIONAL ATIVA</div>
+            </div>
+        </header>
 
-    <main>
-        <!-- Filtros Padronizados -->
-        <section class="section-filters">
-            <div class="filter-item">
-                <select id="modeSelect" class="btn-mode">
-                    <option value="operacional">ANÁLISE OPERACIONAL</option>
-                    <option value="idle">ANÁLISE IDLE</option>
-                </select>
-            </div>
-            <div class="filter-item">
-                <select id="filterMes"><option value="">Todos os Meses</option></select>
-            </div>
-            <div class="filter-item">
-                <select id="filterTurno"><option value="">Todos os Turnos</option></select>
-            </div>
-            <div class="filter-item">
-                <select id="filterCD"><option value="">Todos os CDs</option></select>
-            </div>
-            <div class="filter-item">
-                <select id="filterCargo"><option value="">Todos os Cargos</option></select>
-            </div>
+        <section class="filters-area">
+            <select id="fMes"><option value="">Mês: Todos</option></select>
+            <select id="fTurno"><option value="">Turno: Todos</option></select>
+            <select id="fCd"><option value="">CD: Todos</option></select>
+            <select id="fArea"><option value="">Área: Todas</option></select>
+            <input type="text" id="fSearch" placeholder="Pesquisar responsável ou cargo...">
         </section>
 
-        <!-- KPI Grid -->
         <section class="kpi-grid">
-            <article class="kpi-card">
-                <div class="kpi-data">
-                    <span class="kpi-label">Registros Totais</span>
-                    <span id="kpiTotal" class="kpi-value">0</span>
-                </div>
-                <div class="kpi-icon"><i class="fas fa-database"></i></div>
-            </article>
-
-            <article class="kpi-card">
-                <div class="kpi-data">
-                    <span class="kpi-label">Liderança Turno</span>
-                    <span id="kpiLider" class="kpi-value">-</span>
-                </div>
-                <div class="kpi-icon"><i class="fas fa-users-cog"></i></div>
-            </article>
-
-            <article class="kpi-card">
-                <div class="kpi-data">
-                    <span class="kpi-label">Meta Operacional</span>
-                    <span class="kpi-value">95%</span>
-                </div>
-                <div class="kpi-icon"><i class="fas fa-bullseye"></i></div>
-            </article>
-
-            <article class="kpi-card idle-active">
-                <div class="kpi-data">
-                    <span class="kpi-label">IDLE BRASIL</span>
-                    <span id="kpiIdle" class="kpi-value">0%</span>
-                </div>
-                <div class="kpi-icon"><i class="fas fa-chart-line"></i></div>
-            </article>
+            <div class="card kpi-card">
+                <div class="kpi-data"><span>Registros Totais</span><h2 id="kpi-total">0</h2></div>
+                <div class="icon-box"><i class="fas fa-database" style="color: var(--blue)"></i></div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-data"><span>IDLE Brasil (Médio)</span><h2 id="kpi-idle" style="color: var(--cyan)">0%</h2></div>
+                <div class="icon-box"><i class="fas fa-clock" style="color: var(--cyan)"></i></div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-data"><span>OPA Geral (Médio)</span><h2 id="kpi-opa" style="color: var(--yellow)">0%</h2></div>
+                <div class="icon-box"><i class="fas fa-gauge-high" style="color: var(--yellow)"></i></div>
+            </div>
+            <div class="card kpi-card">
+                <div class="kpi-data"><span>DDSMA / DDQA OK</span><h2 id="kpi-conformidade" style="color: var(--green)">0%</h2></div>
+                <div class="icon-box"><i class="fas fa-shield-check" style="color: var(--green)"></i></div>
+            </div>
         </section>
 
-        <!-- Gráficos Operacionais -->
         <section class="charts-grid">
-            <div class="chart-box span-4">
-                <div class="chart-header">
-                    <div class="chart-title"><i class="fas fa-bolt"></i> Distribuição por Turno</div>
-                </div>
-                <div class="chart-body"><canvas id="chartTurno"></canvas></div>
-            </div>
-
-            <div class="chart-box span-4">
-                <div class="chart-header">
-                    <div class="chart-title"><i class="fas fa-warehouse"></i> Registros por CD</div>
-                </div>
-                <div class="chart-body"><canvas id="chartCD"></canvas></div>
-            </div>
-
-            <div class="chart-box span-4">
-                <div class="chart-header">
-                    <div class="chart-title"><i class="fas fa-th-large"></i> Volume por Área</div>
-                </div>
-                <div class="chart-body"><canvas id="chartArea"></canvas></div>
-            </div>
-
-            <!-- Heatmap -->
-            <div class="chart-box span-12">
-                <div class="chart-header">
-                    <div class="chart-title"><i class="fas fa-calendar-alt"></i> Heatmap Semanal de Envios</div>
-                    <select id="hmCDFilter" style="width: 200px; height: 30px;"></select>
-                </div>
-                <div class="heatmap-container">
-                    <div id="heatmapGrid" class="heatmap-table"></div>
-                </div>
-            </div>
+            <div class="card"><h3>Volume por Turno</h3><div style="height:250px"><canvas id="chartTurno"></canvas></div></div>
+            <div class="card"><h3>Volume por CD</h3><div style="height:250px"><canvas id="chartCD"></canvas></div></div>
+            <div class="card"><h3>Registros por Área</h3><div style="height:250px"><canvas id="chartArea"></canvas></div></div>
         </section>
 
-        <!-- Tabela de Histórico -->
-        <section class="section-table">
-            <div class="table-header">
-                <div class="table-title">Histórico de Registros EOS-BR</div>
-                <div class="search-box">
-                    <i class="fas fa-search"></i>
-                    <input type="text" id="tableSearch" placeholder="Filtrar por nome ou cargo...">
-                </div>
+        <section class="card section-heatmap">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <h3>Heatmap Semanal de Ocupação</h3>
+                <span style="font-size: 11px; color: var(--text-dim);">Baseado no volume de registros por dia/turno</span>
             </div>
+            <div id="hmGrid" class="hm-grid"></div>
+        </section>
+
+        <section class="card section-table">
+            <h3 style="margin-bottom: 15px;">Histórico Detalhado (1000+ Linhas)</h3>
             <div class="table-wrapper">
-                <table id="mainTable">
+                <table>
                     <thead>
                         <tr>
-                            <th>Data / Hora</th>
-                            <th>Mês</th>
-                            <th>Turno</th>
+                            <th>Data</th>
                             <th>CD</th>
                             <th>Responsável</th>
-                            <th>Cargo</th>
-                            <th>Área Operacional</th>
+                            <th>Turno</th>
+                            <th>Área</th>
+                            <th>IDLE %</th>
+                            <th>OPA %</th>
+                            <th>Status (DDSMA/DDQA)</th>
                         </tr>
                     </thead>
                     <tbody id="tableBody"></tbody>
                 </table>
             </div>
         </section>
-    </main>
+    </div>
 
-    <footer>
-        <p>SHOPEE LOGISTICS EOS-BR ANALYTICS DASHBOARD &copy; 2026</p>
-        <p style="margin-top: 5px; opacity: 0.5;">Desenvolvido para alta performance operacional</p>
-    </footer>
-
-    <!-- LOGICA DO SISTEMA -->
     <script>
-        /**
-         * SISTEMA EOS-BR - CORE CONTROLLER
-         * Responsável pelo carregamento, filtragem e renderização dos dados.
-         */
-        
-        const EOS_CONFIG = {
-            url: 'https://docs.google.com/spreadsheets/d/1wTNxkSsq3RAdzJ7n8NLFvwLHvR-_T6SnunsCXRopGcY/edit?gid=0#gid=0',
-            meses: ["Janeiro", "Fevereiro", "Março", "Abril", "Maio", "Junho", "Julho", "Agosto", "Setembro", "Outubro", "Novembro", "Dezembro"],
-            dias: ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"]
+        // URL de exportação direta para CSV
+        const CSV_URL = 'https://docs.google.com/spreadsheets/d/1wTNxkSsq3RAdzJ7n8NLFvwLHvR-_T6SnunsCXRopGcY/export?format=csv&gid=0';
+
+        const State = {
+            raw: [],
+            filtered: [],
+            charts: {}
         };
 
-        const Dashboard = {
-            rawData: [],
-            filteredData: [],
-            charts: {},
-
+        const App = {
             async init() {
                 this.updateClock();
                 try {
-                    const data = await this.fetchData();
-                    this.rawData = this.parseData(data);
-                    this.initDropdowns();
+                    const response = await fetch(CSV_URL);
+                    const csvText = await response.text();
+                    this.processData(csvText);
+                    this.fillFilters();
                     this.initCharts();
                     this.applyFilters();
-                    
-                    document.getElementById('loadingOverlay').classList.add('hidden');
-                    
-                    // Listeners
-                    ['filterMes', 'filterTurno', 'filterCD', 'filterCargo', 'hmCDFilter'].forEach(id => {
-                        document.getElementById(id).addEventListener('change', () => this.applyFilters());
-                    });
-                    
-                    document.getElementById('tableSearch').addEventListener('input', () => this.applyFilters());
-
+                    document.getElementById('loader').style.display = 'none';
                 } catch (e) {
                     console.error(e);
-                    alert("Erro ao conectar com a base de dados.");
+                    alert("Erro ao conectar com a base de dados. Verifique a internet.");
                 }
+
+                // Event Listeners
+                ['fMes', 'fTurno', 'fCd', 'fArea'].forEach(id => {
+                    document.getElementById(id).addEventListener('change', () => this.applyFilters());
+                });
+                document.getElementById('fSearch').addEventListener('input', () => this.applyFilters());
             },
 
-            async fetchData() {
-                const response = await fetch(EOS_CONFIG.url);
-                return await response.text();
-            },
-
-            parseData(csv) {
+            processData(csv) {
                 const lines = csv.split(/\r?\n/);
-                const headers = lines[0].split(',').map(h => h.trim().toLowerCase());
+                const headers = lines[0].split(',').map(h => h.trim());
                 
-                return lines.slice(1).filter(l => l.trim()).map(line => {
-                    const values = line.split(',');
-                    const entry = {};
-                    headers.forEach((h, i) => entry[h] = values[i]?.trim() || "N/A");
+                this.raw = lines.slice(1).filter(l => l.trim()).map(line => {
+                    const cols = line.split(/,(?=(?:(?:[^"]*"){2})*[^"]*$)/); // Regex para tratar vírgulas dentro de aspas
                     
-                    // Normalização de Datas
-                    const dataParts = entry.carimbo?.split(' ')[0].split('/') || [];
-                    const d = dataParts.length === 3 ? new Date(dataParts[2], dataParts[1]-1, dataParts[0]) : new Date();
-                    
-                    return {
-                        ...entry,
-                        dateObj: d,
-                        mes: EOS_CONFIG.meses[d.getMonth()],
-                        diaSemana: EOS_CONFIG.dias[d.getDay() === 0 ? 6 : d.getDay() - 1],
-                        cd: entry.cd === "N/A" || entry.cd === "" ? "N/A" : entry.cd.toUpperCase().replace('JABOATAO', 'BRFPE1')
+                    // Mapeamento baseado na sua estrutura
+                    const dataObj = {
+                        data: cols[0]?.replace(/"/g, '') || '',
+                        cd: cols[1]?.replace(/"/g, '') || '',
+                        responsavel: cols[2]?.replace(/"/g, '') || '',
+                        cargo: cols[3]?.replace(/"/g, '') || '',
+                        turno: cols[4]?.replace(/"/g, '') || '',
+                        area: cols[5]?.replace(/"/g, '') || '',
+                        ddsma: cols[6]?.replace(/"/g, '') || '',
+                        ddqa: cols[8]?.replace(/"/g, '') || '',
+                        idle: parseFloat(cols[12]?.replace(/[^0-9.]/g, '')) || 0,
+                        opa: parseFloat(cols[13]?.replace(/[^0-9.]/g, '')) || 0
                     };
+
+                    // Extrair Mês e Dia da Semana
+                    if (dataObj.data) {
+                        const parts = dataObj.data.split(' ')[0].split('/');
+                        const date = new Date(parts[2], parts[1]-1, parts[0]);
+                        dataObj.mesNum = parts[1];
+                        dataObj.mesNome = ["Janeiro","Fevereiro","Março","Abril","Maio","Junho","Julho","Agosto","Setembro","Outubro","Novembro","Dezembro"][parts[1]-1];
+                        dataObj.diaSemana = ["Domingo","Segunda","Terça","Quarta","Quinta","Sexta","Sábado"][date.getDay()];
+                    }
+                    return dataObj;
                 });
             },
 
-            initDropdowns() {
-                const populate = (id, key, label) => {
-                    const list = [...new Set(this.rawData.map(d => d[key]))].filter(x => x !== "N/A").sort();
-                    const el = document.getElementById(id);
-                    el.innerHTML = `<option value="">${label}</option>` + list.map(v => `<option value="${v}">${v}</option>`).join('');
+            fillFilters() {
+                const unique = (key) => [...new Set(this.raw.map(d => d[key]))].filter(Boolean).sort();
+                
+                const fill = (id, items) => {
+                    const select = document.getElementById(id);
+                    items.forEach(item => {
+                        const opt = document.createElement('option');
+                        opt.value = item;
+                        opt.innerText = item;
+                        select.appendChild(opt);
+                    });
                 };
 
-                populate('filterMes', 'mes', 'Todos os Meses');
-                populate('filterTurno', 'turno', 'Todos os Turnos');
-                populate('filterCD', 'cd', 'Todos os CDs');
-                populate('filterCargo', 'cargo', 'Todos os Cargos');
-                
-                const cds = [...new Set(this.rawData.map(d => d.cd))].filter(x => x !== "N/A").sort();
-                document.getElementById('hmCDFilter').innerHTML = `<option value="">Geral (Toda Rede)</option>` + cds.map(v => `<option value="${v}">${v}</option>`).join('');
+                fill('fMes', unique('mesNome'));
+                fill('fTurno', unique('turno'));
+                fill('fCd', unique('cd'));
+                fill('fArea', unique('area'));
             },
 
             applyFilters() {
-                const filters = {
-                    mes: document.getElementById('filterMes').value,
-                    turno: document.getElementById('filterTurno').value,
-                    cd: document.getElementById('filterCD').value,
-                    cargo: document.getElementById('filterCargo').value,
-                    search: document.getElementById('tableSearch').value.toLowerCase()
+                const f = {
+                    mes: document.getElementById('fMes').value,
+                    turno: document.getElementById('fTurno').value,
+                    cd: document.getElementById('fCd').value,
+                    area: document.getElementById('fArea').value,
+                    search: document.getElementById('fSearch').value.toLowerCase()
                 };
 
-                this.filteredData = this.rawData.filter(d => {
-                    return (!filters.mes || d.mes === filters.mes) &&
-                           (!filters.turno || d.turno === filters.turno) &&
-                           (!filters.cd || d.cd === filters.cd) &&
-                           (!filters.cargo || d.cargo === filters.cargo) &&
-                           (!filters.search || d.responsavel?.toLowerCase().includes(filters.search) || d.cargo?.toLowerCase().includes(filters.search));
+                this.filtered = this.raw.filter(d => {
+                    return (!f.mes || d.mesNome === f.mes) &&
+                           (!f.turno || d.turno === f.turno) &&
+                           (!f.cd || d.cd === f.cd) &&
+                           (!f.area || d.area === f.area) &&
+                           (!f.search || d.responsavel.toLowerCase().includes(f.search) || d.cargo.toLowerCase().includes(f.search));
                 });
 
                 this.updateUI();
             },
 
             updateUI() {
-                this.updateKPIs();
-                this.updateCharts();
-                this.renderHeatmap();
-                this.renderTable();
-            },
-
-            updateKPIs() {
-                document.getElementById('kpiTotal').innerText = this.filteredData.length;
+                // KPIs
+                document.getElementById('kpi-total').innerText = this.filtered.length.toLocaleString();
                 
-                const tCounts = {};
-                this.filteredData.forEach(d => tCounts[d.turno] = (tCounts[d.turno] || 0) + 1);
-                const top = Object.keys(tCounts).sort((a,b) => tCounts[b] - tCounts[a])[0] || "N/A";
-                document.getElementById('kpiLider').innerText = top;
+                const avgIdle = this.filtered.reduce((acc, d) => acc + d.idle, 0) / (this.filtered.length || 1);
+                const avgOpa = this.filtered.reduce((acc, d) => acc + d.opa, 0) / (this.filtered.length || 1);
+                
+                document.getElementById('kpi-idle').innerText = avgIdle.toFixed(1) + "%";
+                document.getElementById('kpi-opa').innerText = avgOpa.toFixed(1) + "%";
 
-                const baseIdle = 95.5;
-                const idle = (baseIdle + (Math.random() * 2)).toFixed(1);
-                document.getElementById('kpiIdle').innerText = idle + "%";
+                const conformidade = (this.filtered.filter(d => d.ddsma === 'SIM' && d.ddqa === 'SIM').length / (this.filtered.length || 1)) * 100;
+                document.getElementById('kpi-conformidade').innerText = conformidade.toFixed(1) + "%";
+
+                this.renderTable();
+                this.renderHeatmap();
+                this.updateCharts();
             },
 
             initCharts() {
                 Chart.register(ChartDataLabels);
-                const baseOptions = {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { display: false },
-                        datalabels: { anchor: 'end', align: 'top', color: '#f0f6fc', font: { weight: 'bold', size: 10 } }
-                    },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 10 } } },
-                        y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e' }, beginAtZero: true }
+                const config = (color) => ({
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { display: false }, datalabels: { color: '#fff', font: { weight: 'bold' } } },
+                    scales: { 
+                        x: { ticks: { color: '#8b949e' }, grid: { display: false } },
+                        y: { ticks: { color: '#8b949e' }, grid: { color: '#30363d' } }
                     }
-                };
-
-                this.charts.turno = new Chart(document.getElementById('chartTurno'), {
-                    type: 'bar',
-                    data: { labels: [], datasets: [{ backgroundColor: '#ee4d2d', data: [], borderRadius: 4 }] },
-                    options: baseOptions
                 });
 
-                this.charts.cd = new Chart(document.getElementById('chartCD'), {
-                    type: 'bar',
-                    data: { labels: [], datasets: [{ backgroundColor: '#2f81f7', data: [], borderRadius: 4 }] },
-                    options: baseOptions
-                });
-
-                this.charts.area = new Chart(document.getElementById('chartArea'), {
-                    type: 'bar',
-                    data: { labels: [], datasets: [{ backgroundColor: '#8957e5', data: [], borderRadius: 4 }] },
-                    options: { ...baseOptions, indexAxis: 'y' }
-                });
+                this.charts.turno = new Chart(document.getElementById('chartTurno'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#ee4d2d', data: [] }] }, options: config() });
+                this.charts.cd = new Chart(document.getElementById('chartCD'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#2f81f7', data: [] }] }, options: config() });
+                this.charts.area = new Chart(document.getElementById('chartArea'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#8957e5', data: [] }] }, options: config() });
             },
 
             updateCharts() {
                 const update = (chart, key) => {
-                    const dataMap = {};
-                    this.filteredData.forEach(d => {
-                        const val = d[key] || "Indefinido";
-                        if(val !== "N/A") dataMap[val] = (dataMap[val] || 0) + 1;
-                    });
-                    
-                    const sortedLabels = Object.keys(dataMap).sort((a,b) => dataMap[b] - dataMap[a]).slice(0, 10);
-                    chart.data.labels = sortedLabels;
-                    chart.data.datasets[0].data = sortedLabels.map(l => dataMap[l]);
+                    const counts = {};
+                    this.filtered.forEach(d => counts[d[key]] = (counts[d[key]] || 0) + 1);
+                    chart.data.labels = Object.keys(counts);
+                    chart.data.datasets[0].data = Object.values(counts);
                     chart.update();
                 };
-
                 update(this.charts.turno, 'turno');
                 update(this.charts.cd, 'cd');
                 update(this.charts.area, 'area');
             },
 
             renderHeatmap() {
-                const targetCD = document.getElementById('hmCDFilter').value;
-                const hData = targetCD ? this.filteredData.filter(d => d.cd === targetCD) : this.filteredData;
-                
-                const turnos = [...new Set(this.rawData.map(d => d.turno))].filter(t => t !== "N/A").sort();
-                const grid = document.getElementById('heatmapGrid');
-                
-                let html = `<div></div>` + EOS_CONFIG.dias.map(d => `<div class="hm-header">${d.substring(0,3)}</div>`).join('');
+                const grid = document.getElementById('hmGrid');
+                const dias = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
+                const turnos = [...new Set(this.raw.map(d => d.turno))].filter(Boolean).sort();
+
+                let html = `<div></div>` + dias.map(d => `<div style="text-align:center; font-size:10px; color:var(--text-dim)">${d.substring(0,3)}</div>`).join('');
                 
                 turnos.forEach(t => {
-                    html += `<div class="hm-row-label">${t}</div>`;
-                    EOS_CONFIG.dias.forEach(d => {
-                        const count = hData.filter(entry => entry.turno === t && entry.diaSemana === d).length;
-                        const opacity = count > 0 ? Math.min(count / 15, 0.9) : 0.05;
-                        html += `<div class="hm-cell" style="background: rgba(238, 77, 45, ${opacity})">${count}</div>`;
+                    html += `<div style="font-weight:700; color:var(--blue)">${t}</div>`;
+                    dias.forEach(d => {
+                        const count = this.filtered.filter(x => x.turno === t && x.diaSemana === d).length;
+                        const opacity = count > 0 ? Math.min(count / 15, 1) : 0.05;
+                        html += `<div class="hm-cell" style="background: rgba(238, 77, 45, ${opacity}); color: ${opacity > 0.5 ? '#fff' : 'var(--text-dim)'}">${count}</div>`;
                     });
                 });
-                
                 grid.innerHTML = html;
             },
 
             renderTable() {
                 const body = document.getElementById('tableBody');
-                body.innerHTML = this.filteredData.slice(0, 100).map(d => `
+                body.innerHTML = this.filtered.slice(0, 1000).map(d => `
                     <tr>
-                        <td style="font-family: var(--font-mono); font-weight: 600;">${d.carimbo}</td>
-                        <td>${d.mes}</td>
-                        <td style="color: var(--primary); font-weight: 800;">${d.turno}</td>
-                        <td style="color: var(--blue); font-weight: 800;">${d.cd}</td>
+                        <td style="font-family:var(--font-mono); color:var(--primary)">${d.data}</td>
+                        <td style="font-weight:700">${d.cd}</td>
                         <td>${d.responsavel}</td>
-                        <td>${d.cargo}</td>
+                        <td style="color:var(--blue); font-weight:700">${d.turno}</td>
                         <td>${d.area}</td>
+                        <td style="font-weight:700">${d.idle}%</td>
+                        <td style="font-weight:700">${d.opa}%</td>
+                        <td>
+                            <i class="fas fa-shield-check" style="color:${d.ddsma==='SIM'?'var(--green)':'#ff4444'}"></i>
+                            <i class="fas fa-check-circle" style="color:${d.ddqa==='SIM'?'var(--green)':'#ff4444'}"></i>
+                        </td>
                     </tr>
                 `).join('');
             },
 
             updateClock() {
                 setInterval(() => {
-                    document.getElementById('clockDisplay').innerText = new Date().toLocaleTimeString('pt-BR');
+                    document.getElementById('clock').innerText = new Date().toLocaleTimeString('pt-BR');
                 }, 1000);
             }
         };
 
-        // Boot
-        document.addEventListener('DOMContentLoaded', () => Dashboard.init());
+        App.init();
     </script>
 </body>
 </html>
