@@ -865,7 +865,7 @@
     Chart.register(ChartDataLabels);
 
     // Link do Web App do Google Apps Script atualizado conforme solicitado
-    const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbzYlcohgdfmKW2n74rdQVrIkLSBgQl2AsqTzyEWFq3XluvtzqZv4rTA_EBM7dR0F59L/exec';
+    const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbwQ261mMl0ZI8wj-W_sMsSH9C38n8WesPlToFnTbjQLg1QyKYPhkIZ91uxyiSi4-BWj/exec';
     const CACHE_KEY = 'eos_dashboard_cache';
     const CACHE_TIME_KEY = 'eos_dashboard_cache_time';
     const CACHE_DURATION = 30 * 1000; 
@@ -894,130 +894,30 @@
         document.getElementById('errorOverlay').style.display = 'none';
     }
 
-    // Leitor de CSV com Mapeamento de Colunas Padronizadas
-    function parseCSV(text) {
-        const lines = text.split(/\r?\n/);
-        if (lines.length === 0) return [];
-
-        const firstLine = lines[0];
-        const separator = (firstLine.match(/;/g) || []).length > (firstLine.match(/,/g) || []).length ? ';' : ',';
-
-        const parseLine = (line) => {
-            const result = [];
-            let current = '';
-            let inQuotes = false;
-            for (let i = 0; i < line.length; i++) {
-                const char = line[i];
-                if (char === '"') {
-                    inQuotes = !inQuotes;
-                } else if (char === separator && !inQuotes) {
-                    result.push(current.trim());
-                    current = '';
-                } else {
-                    current += char;
-                }
-            }
-            result.push(current.trim());
-            return result.map(val => val.replace(/^"|"$/g, '').trim());
-        };
-
-        const headers = parseLine(lines[0]);
-        
-        // Mapeamento baseado nos campos estipulados
-        const headerMap = { dataHora: 0, cd: 1, turno: 2, responsavel: 3, cargo: 4, area: 5 };
-
-        headers.forEach((h, idx) => {
-            const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-            
-            if (norm === "data/hora" || norm.includes("data") || norm.includes("carimbo") || norm.includes("time") || norm.includes("hora")) {
-                headerMap.dataHora = idx;
-            } else if (norm === "cd" || norm.includes("centro") || norm.includes("unidade")) {
-                headerMap.cd = idx;
-            } else if (norm === "turno") {
-                headerMap.turno = idx;
-            } else if (norm === "nome responsavel" || norm === "responsavel" || norm.includes("responsavel") || norm.includes("nome")) {
-                headerMap.responsavel = idx;
-            } else if (norm === "cargo" || norm.includes("funcao")) {
-                headerMap.cargo = idx;
-            } else if (norm === "area" || norm === "área" || norm.includes("area") || norm.includes("setor")) {
-                headerMap.area = idx;
-            }
-        });
-
-        const parsedRows = [];
-        for (let i = 1; i < lines.length; i++) {
-            if (!lines[i].trim()) continue;
-            const cols = parseLine(lines[i]);
-            if (cols.length < 2) continue;
-
-            parsedRows.push({
-                dataHora: cols[headerMap.dataHora] || "",
-                cd: cols[headerMap.cd] || "",
-                turno: cols[headerMap.turno] || "",
-                responsavel: cols[headerMap.responsavel] || "",
-                cargo: cols[headerMap.cargo] || "",
-                area: cols[headerMap.area] || ""
-            });
-        }
-        return parsedRows;
-    }
-
     async function fetchSpreadsheetData() {
         try {
-            console.log("[EOS-BR] Iniciando busca de dados da planilha...");
+            console.log("[EOS-BR] Sincronizando com Google Sheets...");
             const response = await fetch(SPREADSHEET_URL);
-            if (!response.ok) throw new Error("Erro de comunicação HTTP.");
+            if (!response.ok) throw new Error("Erro de rede.");
             
-            const contentType = response.headers.get("content-type") || "";
-            let data = [];
+            const data = await response.json();
             
-            // Tratamento dinâmico e flexível para respostas JSON ou CSV plano do Web App
-            if (contentType.includes("json")) {
-                const json = await response.json();
-                
-                // Se o script do Sheets retornar uma estrutura de erro estruturada
-                if (json.status === "error") {
-                    throw new Error(json.message);
-                }
-                
-                const rawRows = Array.isArray(json) ? json : (json.data || json.rows || []);
-                data = rawRows.map(item => ({
-                    dataHora: item.dataHora || item["Data/Hora"] || item["data/hora"] || item["Timestamp"] || "",
-                    cd: item.cd || item["CD"] || item["CD Operacional"] || "",
-                    turno: item.turno || item["Turno"] || "",
-                    responsavel: item.responsavel || item["Nome Responsável"] || item["nome responsável"] || item["Responsável"] || "",
-                    cargo: item.cargo || item["Cargo"] || "",
-                    area: item.area || item["Área"] || item["Área de Atuação"] || "",
-                    // Transfere dinamicamente todos os outros indicadores específicos
-                    ...item
-                }));
-            } else {
-                const text = await response.text();
-                // Bloqueia a leitura se o Apps Script estiver retornando uma tela de erro em HTML
-                if (text.trim().startsWith("<!DOCTYPE html>") || text.trim().startsWith("<html")) {
-                    throw new Error("O script do Google Sheets retornou uma página de erro HTML. Certifique-se de que a implantação do Web App foi publicada para acesso de 'Qualquer pessoa'.");
-                }
-                data = parseCSV(text);
-            }
-            
-            if (data.length === 0) throw new Error("A base retornou dados vazios.");
+            if (!Array.isArray(data) || data.length === 0) throw new Error("Dados inválidos.");
 
+            // Cache de segurança
             localStorage.setItem(CACHE_KEY, JSON.stringify(data));
             localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
             
             document.getElementById('sync-status').innerText = "BASE OPERACIONAL ATIVA";
             document.getElementById('sync-status').className = "kpi-trend trend-up";
             hideToast();
-            console.log("[EOS-BR] Sincronização de dados concluída. Registros obtidos:", data.length);
             return data;
         } catch (e) {
-            console.error("[EOS-BR] Falha na sincronização remota:", e);
-            const cachedData = localStorage.getItem(CACHE_KEY);
-            if (cachedData) {
-                document.getElementById('sync-status').innerText = "CACHE LOCAL EM USO";
-                document.getElementById('sync-status').className = "kpi-trend trend-warning";
-                showToast("Modo instável detectado. Utilizando cache local...", true);
-                return JSON.parse(cachedData);
+            console.error("[EOS-BR] Erro:", e);
+            const cached = localStorage.getItem(CACHE_KEY);
+            if (cached) {
+                document.getElementById('sync-status').innerText = "MODO OFFLINE (CACHE)";
+                return JSON.parse(cached);
             }
             throw e;
         }
@@ -1066,57 +966,41 @@
 
         processSpreadsheetData(data) {
             this.rawData = data.map(item => {
+                // Tratamento de Data
                 let dObj = new Date();
                 try {
-                    const parts = item.dataHora.split(' ')[0].split('/');
-                    dObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
-                } catch(err) {
-                    // Fallback de parseamento
-                }
+                    if (item.dataHora) {
+                        const dateStr = item.dataHora.toString();
+                        if (dateStr.includes("/")) {
+                            const [d, m, y] = dateStr.split(' ')[0].split('/');
+                            dObj = new Date(y, m - 1, d);
+                        } else {
+                            dObj = new Date(dateStr);
+                        }
+                    }
+                } catch(err) { console.error("Erro data:", err); }
                 
-                let cdNorm = item.cd ? item.cd.toUpperCase().trim() : "";
-                // Validador de segurança contra injeção de strings de erro
-                if (cdNorm.includes(",") || cdNorm.length > 15 || cdNorm.includes("HTTP")) {
-                    return null;
-                }
-                if(cdNorm.includes("JABOATAO")) cdNorm = "BRFPE1";
-                else if(cdNorm.includes("NOVA SANTA RITA")) cdNorm = "BRFRS1";
-                else if(cdNorm.includes("HIDROL")) cdNorm = "BRFGO1";
-                else if(cdNorm.includes("FRANCO 1")) cdNorm = "BRFSP1";
-                else if(cdNorm.includes("FRANCO 2")) cdNorm = "BRFSP2";
-                else if(cdNorm.includes("CONTAGEM")) cdNorm = "BRFMG1";
-
-                let areaNorm = item.area ? item.area.toUpperCase().trim() : "";
-                if (areaNorm.includes("INBOUND")) {
-                    areaNorm = "INBOUND";
-                } else if (areaNorm.includes("PICKING")) {
-                    if (areaNorm.includes("VOL")) areaNorm = "PICKING VOL";
-                    else areaNorm = "PICKING LEVE";
-                } else if (areaNorm.includes("CHECKING")) {
-                    if (areaNorm.includes("VOL")) areaNorm = "CHECKING VOL";
-                    else areaNorm = "CHECKING LEVE";
-                } else if (areaNorm.includes("SHIPPING")) {
-                    areaNorm = "SHIPPING";
-                } else if (areaNorm.includes("INVENTARIO") || areaNorm.includes("INVENTÁRIO")) {
-                    areaNorm = "INVENTARIO";
-                } else if (areaNorm.includes("IBT")) {
-                    areaNorm = "IBT";
-                } else if (areaNorm.includes("QUALIDADE")) {
-                    areaNorm = "QUALIDADE";
-                }
+                // Normalização de CDs para os gráficos (conforme a imagem do dashboard)
+                let cdNorm = item.cd ? item.cd.toString().toUpperCase().trim() : "BRFSP1";
+                if (cdNorm.includes("FRANCO 1")) cdNorm = "BRFSP1";
+                if (cdNorm.includes("FRANCO 2")) cdNorm = "BRFSP2";
+                if (cdNorm.includes("JABOATAO")) cdNorm = "BRFPE1";
+                if (cdNorm.includes("NOVA SANTA RITA")) cdNorm = "BRFRS1";
+                if (cdNorm.includes("HIDROL")) cdNorm = "BRFGO1";
+                if (cdNorm.includes("CONTAGEM")) cdNorm = "BRFMG1";
 
                 return {
                     ...item,
                     dataObj: dObj,
                     cd: cdNorm,
-                    area: areaNorm,
-                    mes: this.mesesMapeados[dObj.getMonth()] || "Desconhecido",
+                    area: item.area ? item.area.toUpperCase().trim() : "N/A",
+                    mes: this.mesesMapeados[dObj.getMonth()] || "Janeiro",
                     diaSemana: this.diasSemanaEixo[dObj.getDay() === 0 ? 6 : dObj.getDay() - 1] || "Segunda"
                 };
-            }).filter(Boolean); // Limpa linhas corrompidas
+            });
 
             this.listaCDsGerais = [...new Set(this.rawData.map(d => d.cd))].filter(Boolean).sort();
-            this.turnosEixo = [...new Set(this.rawData.map(d => d.turno))].filter(Boolean).sort();
+            this.turnosEixo = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"];
             
             const mesesPlanilha = [...new Set(this.rawData.map(d => d.mes))].filter(Boolean);
             this.mesesExistentesOrdenados = this.mesesMapeados.filter(m => mesesPlanilha.includes(m));
@@ -1279,7 +1163,6 @@
             const canvasTurno = document.getElementById('chartTurno');
             const ctxTurno = canvasTurno.getContext('2d');
             
-            // Tratamento contra erro de gradient quando o elemento está temporariamente colapsado (altura 0)
             let gradTurno;
             try {
                 gradTurno = ctxTurno.createLinearGradient(0, 0, 0, canvasTurno.height || 180);
@@ -1341,7 +1224,6 @@
             this.charts.area.data.datasets[0].data = areaSet.map(a => this.filteredData.filter(d => d.area === a).length);
             this.charts.area.update();
 
-            // Sincroniza dados analíticos reais nas barras de CD e Turno do sub-processo
             this.idleCharts.cd.data.labels = this.listaCDsGerais;
             this.idleCharts.cd.data.datasets[0].data = this.listaCDsGerais.map(cd => {
                 const cdRows = this.rawData.filter(r => r.cd === cd);
@@ -1433,7 +1315,6 @@
         indicatorSelected: '',
         charts: {},
 
-        // MAPEAMENTO DOS COMPONENTES E CHAVES DE INDICADORES PADRONIZADOS EM CAIXA ALTA (UPPERCASE)
         indicadoresPorArea: {
             "INBOUND": ["DDSMA", "DDQA", "RECEBIMENTO", "LH", "PUTAWAY", "QTD DE CARROS", "BUFFER PUTAWAY", "IDLE TIME", "TRATATIVAS", "OPA"],
             "PICKING LEVE": ["DDSMA", "DDQA", "META DMO", "REIMPRESSÃO DE ENDEREÇO", "FALTAS", "AVARIAS", "ENTREGAS DE COTs", "IDLE TIME", "OPA"],
@@ -1501,47 +1382,43 @@
             return parseFloat((min + r * (max - min)).toFixed(dec));
         },
 
-        // CÁLCULO DINÂMICO SEGURO DE INDICADORES REAIS DO GOOGLE SHEETS
         calculateRealMetric(rows, metricName) {
             if (!rows || rows.length === 0) return null;
             let total = 0;
-            let success = 0;
+            let somaReal = 0;
             
-            try {
-                rows.forEach(r => {
-                    if (!r) return;
-                    Object.keys(r).forEach(key => {
-                        const normKey = (key || "").toString().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        const targetMetric = (metricName || "").toString().toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        
-                        if (normKey.includes(targetMetric)) {
-                            const rawVal = r[key];
-                            if (rawVal !== null && rawVal !== undefined) {
-                                const val = rawVal.toString().toUpperCase().trim();
-                                if (val === "SIM" || val === "REALIZADO" || val === "OK" || val === "100%" || val === "100") {
-                                    success++;
-                                    total++;
-                                } else if (val === "NAO" || val === "NAO REALIZADO" || val === "PENDENTE" || val === "NAO OK" || val === "0%" || val === "0") {
-                                    total++;
-                                } else {
-                                    // Se for campo de porcentagem real (ex: IDLE TIME Meta/Real)
-                                    const num = parseFloat(val.replace("%", "").trim());
-                                    if (!isNaN(num)) {
-                                        success += num;
-                                        total += 100;
-                                    }
-                                }
-                            }
-                        }
-                    });
-                });
-            } catch (err) {
-                console.error("[EOS-BR] Falha ao processar cálculo de métrica real:", err);
-                return null;
-            }
+            const keyMap = {
+                "IDLE TIME": "idle",
+                "DDSMA": "ddsma",
+                "DDQA": "ddqa",
+                "OPA": "opa"
+            };
+
+            const targetKey = keyMap[metricName] || metricName.toLowerCase();
+
+            rows.forEach(r => {
+                const val = r[targetKey];
+                if (val === undefined || val === null || val === "") return;
+
+                if (metricName === "IDLE TIME") {
+                    let num = parseFloat(val.toString().replace("%", "").replace(",", "."));
+                    if (!isNaN(num)) {
+                        somaReal += num;
+                        total++;
+                    }
+                } else {
+                    const text = val.toString().toUpperCase().trim();
+                    if (text === "SIM" || text === "OK" || text === "REALIZADO") {
+                        somaReal += 100;
+                        total++;
+                    } else if (text === "NÃO" || text === "NAO" || text === "PENDENTE") {
+                        somaReal += 0;
+                        total++;
+                    }
+                }
+            });
             
-            if (total === 0) return null; // Sem dados reais computados
-            return (success / total) * 100;
+            return total === 0 ? null : (somaReal / total);
         },
 
         getIndicatorsForArea(area) {
@@ -1550,7 +1427,6 @@
         },
 
         renderLevel1Brasil() {
-            // Calcula métricas reais nacionais; se vazias, aplica fallbacks determinísticos estáveis
             const realIdle = this.calculateRealMetric(Dashboard.rawData, "IDLE TIME");
             const brIdle = realIdle !== null ? realIdle : this.getDeterministicValue('br_idle_v', 92.5, 94.8);
 
@@ -1572,6 +1448,24 @@
             this.setTrendBadge('br-opa-status', brOpa, 95);
             this.setTrendBadge('br-ddsma-status', brDdsma, 98);
             this.setTrendBadge('br-ddqa-status', brDdqa, 96);
+        },
+
+        setKpiText(id, val, color) {
+            const el = document.getElementById(id);
+            if(el) { el.innerText = val; el.style.color = color; }
+        },
+
+        setTrendBadge(id, val, meta) {
+            const el = document.getElementById(id);
+            if(!el) return;
+            const diff = val - meta;
+            if (val >= meta) {
+                el.innerText = "Meta OK";
+                el.className = "kpi-trend trend-up";
+            } else {
+                el.innerText = `Gap: ${diff.toFixed(1)}%`;
+                el.className = "kpi-trend trend-danger";
+            }
         },
 
         updateBreadcrumb() {
@@ -1599,7 +1493,6 @@
                 document.getElementById('idle-nivel-4').classList.add('hidden');
                 document.getElementById('transition-cd-box').classList.add('active');
                 document.getElementById('transition-area-box').classList.remove('active');
-                
                 Dashboard.extraAreaFilter = '';
                 document.getElementById('filter-cd').value = '';
                 Dashboard.applyFilters();
@@ -1611,7 +1504,6 @@
                 document.getElementById('idle-nivel-4').classList.add('hidden');
                 document.getElementById('transition-area-box').classList.add('active');
                 document.getElementById('transition-indicator-box').classList.remove('active');
-
                 Dashboard.extraAreaFilter = '';
                 Dashboard.applyFilters();
             } else if (level === 3) {
@@ -1624,30 +1516,22 @@
         },
 
         onSelectCD(cd) {
-            if (!cd) {
-                this.resetToLevel(1);
-                return;
-            }
+            if (!cd) { this.resetToLevel(1); return; }
             this.cdSelected = cd;
             this.areaSelected = '';
             this.indicatorSelected = '';
-            
             document.getElementById('cd-display-name').innerText = cd;
             document.getElementById('idle-nivel-2').classList.remove('hidden');
             document.getElementById('idle-nivel-3').classList.add('hidden');
             document.getElementById('idle-nivel-4').classList.add('hidden');
             document.getElementById('transition-cd-box').classList.remove('active');
             document.getElementById('transition-area-box').classList.add('active');
-
             document.getElementById('filter-cd').value = cd;
             Dashboard.extraAreaFilter = '';
             Dashboard.applyFilters();
-
             const areasDoCD = [...new Set(Dashboard.rawData.filter(d => d.cd === cd).map(d => d.area))].filter(Boolean).sort();
             const areaSelector = document.getElementById('idle-area-selector');
-            areaSelector.innerHTML = '<option value="">-- Selecione a Área --</option>' + 
-                areasDoCD.map(a => `<option value="${a}">${a}</option>`).join('');
-
+            areaSelector.innerHTML = '<option value="">-- Selecione a Área --</option>' + areasDoCD.map(a => `<option value="${a}">${a}</option>`).join('');
             this.updateBreadcrumb();
             this.renderCdLevel();
         },
@@ -1655,16 +1539,12 @@
         renderCdLevel() {
             const key = this.cdSelected;
             const cdRows = Dashboard.rawData.filter(r => r.cd === key);
-
             const rIdle = this.calculateRealMetric(cdRows, "IDLE TIME");
             const cdIdle = rIdle !== null ? rIdle : this.getDeterministicValue(key + '_idle', 91.2, 96.4);
-
             const rOpa = this.calculateRealMetric(cdRows, "OPA");
             const cdOpa = rOpa !== null ? rOpa : this.getDeterministicValue(key + '_opa', 92.0, 95.8);
-
             const rDdsma = this.calculateRealMetric(cdRows, "DDSMA");
             const cdDdsma = rDdsma !== null ? rDdsma : this.getDeterministicValue(key + '_ddsma', 96.1, 99.2);
-
             const rDdqa = this.calculateRealMetric(cdRows, "DDQA");
             const cdDdqa = rDdqa !== null ? rDdqa : this.getDeterministicValue(key + '_ddqa', 93.3, 97.4);
 
@@ -1672,38 +1552,28 @@
             this.setKpiText('cd-opa-val', `${cdOpa.toFixed(1)}%`, cdOpa >= 95 ? 'var(--accent-green)' : 'var(--accent-yellow)');
             this.setKpiText('cd-ddsma-val', `${cdDdsma.toFixed(1)}%`, cdDdsma >= 98 ? 'var(--accent-green)' : 'var(--accent-yellow)');
             this.setKpiText('cd-ddqa-val', `${cdDdqa.toFixed(1)}%`, cdDdqa >= 96 ? 'var(--accent-green)' : 'var(--accent-yellow)');
-
             this.setTrendBadge('cd-idle-status', cdIdle, 95);
             this.setTrendBadge('cd-opa-status', cdOpa, 95);
             this.setTrendBadge('cd-ddsma-status', cdDdsma, 98);
             this.setTrendBadge('cd-ddqa-status', cdDdqa, 96);
-
             this.renderCdCharts();
             this.renderCdHeatmap();
         },
 
         onSelectArea(area) {
-            if (!area) {
-                this.resetToLevel(2);
-                return;
-            }
+            if (!area) { this.resetToLevel(2); return; }
             this.areaSelected = area;
             this.indicatorSelected = '';
-
             document.getElementById('area-display-name').innerText = area;
             document.getElementById('idle-nivel-3').classList.remove('hidden');
             document.getElementById('idle-nivel-4').classList.add('hidden');
             document.getElementById('transition-area-box').classList.remove('active');
             document.getElementById('transition-indicator-box').classList.add('active');
-
             Dashboard.extraAreaFilter = area;
             Dashboard.applyFilters();
-
             const listInd = this.getIndicatorsForArea(area);
             const selectEl = document.getElementById('idle-indicator-selector');
-            selectEl.innerHTML = `<option value="">-- Selecione o Indicador --</option>` + 
-                listInd.map(ind => `<option value="${ind}">▼ ${ind}</option>`).join('');
-
+            selectEl.innerHTML = `<option value="">-- Selecione o Indicador --</option>` + listInd.map(ind => `<option value="${ind}">▼ ${ind}</option>`).join('');
             this.updateBreadcrumb();
             this.renderAreaLevel();
         },
@@ -1711,16 +1581,12 @@
         renderAreaLevel() {
             const key = this.cdSelected + '_' + this.areaSelected;
             const areaRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected);
-
             const rIdle = this.calculateRealMetric(areaRows, "IDLE TIME");
             const areaIdle = rIdle !== null ? rIdle : this.getDeterministicValue(key + '_idle', 89.1, 96.9);
-
             const rOpa = this.calculateRealMetric(areaRows, "OPA");
             const areaOpa = rOpa !== null ? rOpa : this.getDeterministicValue(key + '_opa', 90.3, 95.6);
-
             const rDdsma = this.calculateRealMetric(areaRows, "DDSMA");
             const areaDdsma = rDdsma !== null ? rDdsma : this.getDeterministicValue(key + '_ddsma', 95.2, 99.1);
-
             const rDdqa = this.calculateRealMetric(areaRows, "DDQA");
             const areaDdqa = rDdqa !== null ? rDdqa : this.getDeterministicValue(key + '_ddqa', 92.4, 97.9);
 
@@ -1728,20 +1594,15 @@
             this.setKpiText('area-opa-val', `${areaOpa.toFixed(1)}%`, areaOpa >= 95 ? 'var(--accent-green)' : 'var(--accent-yellow)');
             this.setKpiText('area-ddsma-val', `${areaDdsma.toFixed(1)}%`, areaDdsma >= 98 ? 'var(--accent-green)' : 'var(--accent-yellow)');
             this.setKpiText('area-ddqa-val', `${areaDdqa.toFixed(1)}%`, areaDdqa >= 96 ? 'var(--accent-green)' : 'var(--accent-yellow)');
-
             this.renderAreaCharts();
         },
 
         onSelectIndicator(indicator) {
-            if (!indicator) {
-                this.resetToLevel(3);
-                return;
-            }
+            if (!indicator) { this.resetToLevel(3); return; }
             this.indicatorSelected = indicator;
             document.getElementById('indicator-display-name').innerText = indicator;
             document.getElementById('idle-nivel-4').classList.remove('hidden');
             document.getElementById('transition-indicator-box').classList.remove('active');
-
             this.updateBreadcrumb();
             this.renderIndicatorLevel();
         },
@@ -1749,35 +1610,21 @@
         renderIndicatorLevel() {
             const key = this.cdSelected + '_' + this.areaSelected + '_' + this.indicatorSelected;
             const indRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected);
-            
             let meta = 95.0;
             let real = this.calculateRealMetric(indRows, this.indicatorSelected);
-            
             const isReverse = (this.indicatorSelected === "FALTAS" || this.indicatorSelected === "AVARIAS" || this.indicatorSelected === "REIMPRESSÃO DE ENDEREÇO" || this.indicatorSelected === "NÃO CONFORMIDADES" || this.indicatorSelected === "DIVERGÊNCIA" || this.indicatorSelected === "ERRO DE CHECKING" || this.indicatorSelected === "DIVERGÊNCIA DE PORTARIA" || this.indicatorSelected === "DIVERGÊNCIA DE CARGA IBT" || this.indicatorSelected === "REJEITOS DE PROCESSO" || this.indicatorSelected === "GRAVIDADE DAS OCORRÊNCIAS" || this.indicatorSelected === "ABS" || this.indicatorSelected === "HC AUSENTES" || this.indicatorSelected === "SHORTAGES" || this.indicatorSelected === "SURPLUS" || this.indicatorSelected === "MTO FAIL" || this.indicatorSelected === "SOBRAS" || this.indicatorSelected === "FALTA");
-
-            if (this.indicatorSelected === "DDSMA") {
-                meta = 98.0;
-            } else if (this.indicatorSelected === "DDQA") {
-                meta = 96.0;
-            } else if (isReverse) {
-                meta = 2.0; 
-            }
-
-            // Fallback se não houver dados reais preenchidos para a coluna na aba específica
-            if (real === null) {
-                real = this.getDeterministicValue(key + '_real', isReverse ? 0.4 : 91.5, isReverse ? 2.5 : 98.2);
-            }
-
+            if (this.indicatorSelected === "DDSMA") meta = 98.0;
+            else if (this.indicatorSelected === "DDQA") meta = 96.0;
+            else if (isReverse) meta = 2.0; 
+            if (real === null) real = this.getDeterministicValue(key + '_real', isReverse ? 0.4 : 91.5, isReverse ? 2.5 : 98.2);
             const gap = real - meta;
             const success = isReverse ? (real <= meta) : (real >= meta);
 
             document.getElementById('ind-meta-val').innerText = meta + "%";
             document.getElementById('ind-realizado-val').innerText = real.toFixed(1) + "%";
-            
             const gapEl = document.getElementById('ind-gap-val');
             const gapCard = document.getElementById('ind-gap-card');
             const gapIcon = document.getElementById('ind-gap-icon');
-            
             gapEl.innerText = (gap >= 0 ? "+" : "") + gap.toFixed(1) + "%";
             if (success) {
                 gapEl.style.color = 'var(--accent-green)';
@@ -1788,11 +1635,9 @@
                 gapCard.style.borderColor = 'var(--shopee-orange)';
                 gapIcon.innerHTML = `<i class="fas fa-minus-circle" style="color: var(--shopee-orange)"></i>`;
             }
-
             const statusEl = document.getElementById('ind-status-val');
             const statusCard = document.getElementById('ind-status-card');
             const statusIcon = document.getElementById('ind-status-icon');
-
             if (success) {
                 statusEl.innerText = "DENTRO DA META";
                 statusEl.style.color = 'var(--accent-green)';
@@ -1809,7 +1654,6 @@
                 statusCard.style.borderColor = 'var(--shopee-orange)';
                 statusIcon.innerHTML = `<i class="fas fa-times-circle" style="color: var(--shopee-orange)"></i>`;
             }
-
             this.renderIndicatorCharts(key, meta, isReverse);
             this.renderIndicatorHeatmaps(key);
         },
@@ -1818,69 +1662,30 @@
             const ctxCanvas = document.getElementById('chartCdMetaReal');
             const ctx = ctxCanvas.getContext('2d');
             if (this.charts.cdMetaReal) this.charts.cdMetaReal.destroy();
-
             const key = this.cdSelected;
             const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
             const metaData = Array(7).fill(95);
-            
             const realData = days.map((d, i) => {
                 const dayRows = Dashboard.rawData.filter(r => r.cd === key && r.diaSemana === d);
                 const realVal = this.calculateRealMetric(dayRows, "IDLE TIME");
                 return realVal !== null ? realVal : this.getDeterministicValue(key + '_dayMR_' + i, 91.5, 97.8);
             });
-
             let gradientFill;
             try {
                 gradientFill = ctx.createLinearGradient(0, 0, 0, ctxCanvas.height || 180);
                 gradientFill.addColorStop(0, 'rgba(57, 197, 207, 0.4)');
                 gradientFill.addColorStop(1, 'rgba(57, 197, 207, 0)');
-            } catch(e) {
-                gradientFill = 'transparent';
-            }
-
+            } catch(e) { gradientFill = 'transparent'; }
             this.charts.cdMetaReal = new Chart(ctx, {
                 type: 'line',
                 data: {
                     labels: days,
                     datasets: [
-                        { 
-                            label: 'Realizado', 
-                            data: realData, 
-                            borderColor: '#00f2fe', 
-                            borderWidth: 3,
-                            backgroundColor: gradientFill,
-                            fill: true,
-                            tension: 0.4, 
-                            pointRadius: 4,
-                            pointBackgroundColor: '#00f2fe',
-                            pointBorderColor: '#0d1117',
-                            pointBorderWidth: 1.5,
-                            pointHoverRadius: 6
-                        },
-                        { 
-                            label: 'Meta (95%)', 
-                            data: metaData, 
-                            borderColor: '#ee4d2d', 
-                            borderWidth: 2,
-                            borderDash: [5, 5], 
-                            backgroundColor: 'transparent', 
-                            tension: 0, 
-                            pointRadius: 0,
-                            datalabels: { display: false }
-                        }
+                        { label: 'Realizado', data: realData, borderColor: '#00f2fe', borderWidth: 3, backgroundColor: gradientFill, fill: true, tension: 0.4, pointRadius: 4, pointBackgroundColor: '#00f2fe', pointBorderColor: '#0d1117', pointBorderWidth: 1.5, pointHoverRadius: 6 },
+                        { label: 'Meta (95%)', data: metaData, borderColor: '#ee4d2d', borderWidth: 2, borderDash: [5, 5], backgroundColor: 'transparent', tension: 0, pointRadius: 0, datalabels: { display: false } }
                     ]
                 },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { display: true, position: 'top', labels: { color: '#8b949e', font: { size: 9, weight: '600' } } }, 
-                        datalabels: { display: false } 
-                    },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                        y: { min: 85, max: 100, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { color: '#8b949e', font: { size: 9, weight: '600' } } }, datalabels: { display: false } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } }, y: { min: 85, max: 100, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } } } }
             });
         },
 
@@ -1889,7 +1694,6 @@
             const matrix = {};
             const miniT = ["T1", "T2", "T3"];
             const diasAbreviados = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-            
             miniT.forEach(t => { matrix[t] = {}; diasAbreviados.forEach(d => matrix[t][d] = 0); });
             diasAbreviados.forEach((d) => {
                 miniT.forEach((t) => {
@@ -1898,7 +1702,6 @@
                     matrix[t][d] = realVal !== null ? realVal : this.getDeterministicValue(target + '_' + t + '_' + d, 88.2, 98.9);
                 });
             });
-
             let h = `<div class="heatmap-grid"><div></div>` + diasAbreviados.map(d => `<div class="heatmap-header-cell">${d}</div>`).join('') + `</div>`;
             miniT.forEach(t => {
                 h += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + diasAbreviados.map(d => {
@@ -1915,129 +1718,54 @@
             const ctxCanvas1 = document.getElementById('chartAreaMetaReal');
             const ctx1 = ctxCanvas1.getContext('2d');
             if (this.charts.areaMetaReal) this.charts.areaMetaReal.destroy();
-
             const key = this.cdSelected + '_' + this.areaSelected;
             const metaData = Array(5).fill(95);
             const realData = Array(5).fill(0).map((_, i) => this.getDeterministicValue(key + '_areaMR_' + i, 90.2, 97.4));
-
             let barGrad;
             try {
                 barGrad = ctx1.createLinearGradient(0, 0, 0, ctxCanvas1.height || 180);
                 barGrad.addColorStop(0, '#00f2fe');
                 barGrad.addColorStop(1, '#4facfe');
-            } catch(e) {
-                barGrad = '#00f2fe';
-            }
-
+            } catch(e) { barGrad = '#00f2fe'; }
             this.charts.areaMetaReal = new Chart(ctx1, {
                 type: 'bar',
                 data: {
                     labels: ['Semana 1', 'Semana 2', 'Semana 3', 'Semana 4', 'Atual'],
                     datasets: [
-                        { 
-                            label: 'Realizado', 
-                            data: realData, 
-                            backgroundColor: barGrad, 
-                            borderRadius: 5,
-                            borderWidth: 1,
-                            borderColor: '#00f2fe'
-                        },
-                        { 
-                            label: 'Meta (95%)', 
-                            data: metaData, 
-                            type: 'line', 
-                            borderColor: '#ee4d2d', 
-                            borderWidth: 2, 
-                            pointRadius: 0,
-                            fill: false,
-                            datalabels: { display: false }
-                        }
+                        { label: 'Realizado', data: realData, backgroundColor: barGrad, borderRadius: 5, borderWidth: 1, borderColor: '#00f2fe' },
+                        { label: 'Meta (95%)', data: metaData, type: 'line', borderColor: '#ee4d2d', borderWidth: 2, pointRadius: 0, fill: false, datalabels: { display: false } }
                     ]
                 },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { display: true, position: 'top', labels: { color: '#8b949e', font: { size: 9, weight: '600' } } }, 
-                        datalabels: { 
-                            display: true,
-                            anchor: 'end',
-                            align: 'top',
-                            offset: -2,
-                            color: '#00f2fe',
-                            font: { size: 9, weight: '800' },
-                            formatter: v => v ? parseFloat(v).toFixed(1) + '%' : ''
-                        } 
-                    },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                        y: { min: 80, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, position: 'top', labels: { color: '#8b949e', font: { size: 9, weight: '600' } } }, datalabels: { display: true, anchor: 'end', align: 'top', offset: -2, color: '#00f2fe', font: { size: 9, weight: '800' }, formatter: v => v ? parseFloat(v).toFixed(1) + '%' : '' } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } }, y: { min: 80, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } } } }
             });
 
             const ctxCanvas2 = document.getElementById('chartAreaTurnos');
             const ctx2 = ctxCanvas2.getContext('2d');
             if (this.charts.areaTurnos) this.charts.areaTurnos.destroy();
-
             const turnosEspeciais = this.getCDTurnos(this.cdSelected);
             const performanceTurnos = turnosEspeciais.map((t) => {
                 const turnRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected && r.turno === t);
                 const realVal = this.calculateRealMetric(turnRows, "IDLE TIME");
                 return realVal !== null ? realVal : this.getDeterministicValue(key + '_turnPerf_' + t, 89.2, 98.4);
             });
-
             let goldGrad;
             try {
                 goldGrad = ctx2.createLinearGradient(0, 0, 0, ctxCanvas2.height || 180);
                 goldGrad.addColorStop(0, '#ffd166');
                 goldGrad.addColorStop(1, '#f7b267');
-            } catch(e) {
-                goldGrad = '#ffd166';
-            }
-
+            } catch(e) { goldGrad = '#ffd166'; }
             this.charts.areaTurnos = new Chart(ctx2, {
                 type: 'bar',
                 data: {
                     labels: turnosEspeciais.map(t => `${t} (${this.cdSelected})`),
-                    datasets: [{ 
-                        backgroundColor: goldGrad, 
-                        data: performanceTurnos, 
-                        borderRadius: 5,
-                        borderWidth: 1,
-                        borderColor: '#ffd166'
-                    }]
+                    datasets: [{ backgroundColor: goldGrad, data: performanceTurnos, borderRadius: 5, borderWidth: 1, borderColor: '#ffd166' }]
                 },
-                options: {
-                    responsive: true, maintainAspectRatio: false,
-                    plugins: { 
-                        legend: { display: false }, 
-                        datalabels: { 
-                            display: true, 
-                            anchor: 'end', 
-                            align: 'top', 
-                            offset: -2,
-                            color: '#ffd166', 
-                            font: { size: 10, weight: '800' }, 
-                            formatter: v => v ? parseFloat(v).toFixed(1) + '%' : '' 
-                        } 
-                    },
-                    scales: {
-                        x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                        y: { min: 80, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } }
-                    }
-                }
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, anchor: 'end', align: 'top', offset: -2, color: '#ffd166', font: { size: 10, weight: '800' }, formatter: v => v ? parseFloat(v).toFixed(1) + '%' : '' } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } }, y: { min: 80, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } } } }
             });
         },
 
         getCDTurnos(cd) {
-            const cdTurnosMap = {
-                "BRFSP1": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"],
-                "BRFSP2": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"],
-                "BRFPE1": ["T1", "T2", "T3"],
-                "BRFRS1": ["T1", "T2"],
-                "BRFGO1": ["T1", "T2"],
-                "BRFMG1": ["T1", "T2"]
-            };
+            const cdTurnosMap = { "BRFSP1": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"], "BRFSP2": ["T1", "T2", "T3", "T4", "T5", "T6", "T7"], "BRFPE1": ["T1", "T2", "T3"], "BRFRS1": ["T1", "T2"], "BRFGO1": ["T1", "T2"], "BRFMG1": ["T1", "T2"] };
             return cdTurnosMap[cd] || ["T1", "T2", "T3", "T4"];
         },
 
@@ -2048,211 +1776,46 @@
                 const realVal = this.calculateRealMetric(filterRows, this.indicatorSelected);
                 return realVal !== null ? realVal : this.getDeterministicValue(key + '_daily_' + i, isReverse ? 0.3 : 90.1, isReverse ? 4.2 : 99.4);
             });
-
             const weeks = ["Semana 1", "Semana 2", "Semana 3", "Semana 4"];
             const weeklyData = weeks.map((_, i) => this.getDeterministicValue(key + '_weekly_' + i, isReverse ? 0.5 : 91.2, isReverse ? 3.9 : 98.6));
-
             const months = ["Jan", "Fev", "Mar", "Abr", "Mai", "Jun"];
             const monthlyData = months.map((_, i) => this.getDeterministicValue(key + '_monthly_' + i, isReverse ? 0.8 : 92.4, isReverse ? 3.1 : 97.9));
-
-            const getMinMaxY = (dataArr) => {
-                const minVal = Math.min(...dataArr);
-                const maxVal = Math.max(...dataArr);
-                return {
-                    min: isReverse ? 0 : Math.max(0, Math.floor(minVal - 2)),
-                    max: isReverse ? Math.ceil(maxVal + 1) : Math.min(100, Math.ceil(maxVal + 2))
-                };
-            };
-
-            const commonChartOptions = (lineColor, minMax) => ({
-                responsive: true, maintainAspectRatio: false,
-                plugins: { 
-                    legend: { display: false }, 
-                    datalabels: { 
-                        display: true,
-                        anchor: 'end',
-                        align: 'top',
-                        color: lineColor,
-                        font: { size: 8, weight: 'bold' },
-                        formatter: v => v ? parseFloat(v).toFixed(1) + '%' : ''
-                    } 
-                },
-                scales: {
-                    x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 8 } } },
-                    y: { 
-                        min: minMax.min, 
-                        max: minMax.max, 
-                        grid: { color: '#30363d' }, 
-                        ticks: { color: '#8b949e', font: { size: 8 } } 
-                    }
-                }
-            });
+            const getMinMaxY = (dataArr) => { const minVal = Math.min(...dataArr); const maxVal = Math.max(...dataArr); return { min: isReverse ? 0 : Math.max(0, Math.floor(minVal - 2)), max: isReverse ? Math.ceil(maxVal + 1) : Math.min(100, Math.ceil(maxVal + 2)) }; };
+            const commonChartOptions = (lineColor, minMax) => ({ responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false }, datalabels: { display: true, anchor: 'end', align: 'top', color: lineColor, font: { size: 8, weight: 'bold' }, formatter: v => v ? parseFloat(v).toFixed(1) + '%' : '' } }, scales: { x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 8 } } }, y: { min: minMax.min, max: minMax.max, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 8 } } } } });
 
             const ctxCanvasDaily = document.getElementById('chartIndDaily');
             const ctxDaily = ctxCanvasDaily.getContext('2d');
             if (this.charts.indDaily) this.charts.indDaily.destroy();
-            
             let gradDaily;
-            try {
-                gradDaily = ctxDaily.createLinearGradient(0, 0, 0, ctxCanvasDaily.height || 180);
-                gradDaily.addColorStop(0, 'rgba(0, 242, 254, 0.3)');
-                gradDaily.addColorStop(1, 'rgba(0, 242, 254, 0)');
-            } catch(e) {
-                gradDaily = 'transparent';
-            }
-
-            this.charts.indDaily = new Chart(ctxDaily, {
-                type: 'line',
-                data: {
-                    labels: days,
-                    datasets: [
-                        { 
-                            data: dailyData, 
-                            borderColor: '#00f2fe', 
-                            backgroundColor: gradDaily,
-                            fill: true,
-                            tension: 0.4, 
-                            borderWidth: 2.5,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#00f2fe'
-                        },
-                        { 
-                            data: Array(7).fill(meta), 
-                            borderColor: '#ee4d2d', 
-                            borderDash: [4, 4], 
-                            pointRadius: 0, 
-                            borderWidth: 1,
-                            datalabels: { display: false }
-                        }
-                    ]
-                },
-                options: commonChartOptions('#00f2fe', getMinMaxY(dailyData))
-            });
+            try { gradDaily = ctxDaily.createLinearGradient(0, 0, 0, ctxCanvasDaily.height || 180); gradDaily.addColorStop(0, 'rgba(0, 242, 254, 0.3)'); gradDaily.addColorStop(1, 'rgba(0, 242, 254, 0)'); } catch(e) { gradDaily = 'transparent'; }
+            this.charts.indDaily = new Chart(ctxDaily, { type: 'line', data: { labels: days, datasets: [{ data: dailyData, borderColor: '#00f2fe', backgroundColor: gradDaily, fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: '#00f2fe' }, { data: Array(7).fill(meta), borderColor: '#ee4d2d', borderDash: [4, 4], pointRadius: 0, borderWidth: 1, datalabels: { display: false } }] }, options: commonChartOptions('#00f2fe', getMinMaxY(dailyData)) });
 
             const ctxCanvasWeekly = document.getElementById('chartIndWeekly');
             const ctxWeekly = ctxCanvasWeekly.getContext('2d');
             if (this.charts.indWeekly) this.charts.indWeekly.destroy();
-            
             let gradWeekly;
-            try {
-                gradWeekly = ctxWeekly.createLinearGradient(0, 0, 0, ctxCanvasWeekly.height || 180);
-                gradWeekly.addColorStop(0, 'rgba(63, 185, 80, 0.3)');
-                gradWeekly.addColorStop(1, 'rgba(63, 185, 80, 0)');
-            } catch(e) {
-                gradWeekly = 'transparent';
-            }
-
-            this.charts.indWeekly = new Chart(ctxWeekly, {
-                type: 'line',
-                data: {
-                    labels: weeks,
-                    datasets: [
-                        { 
-                            data: weeklyData, 
-                            borderColor: '#3fb950', 
-                            backgroundColor: gradWeekly,
-                            fill: true,
-                            tension: 0.4, 
-                            borderWidth: 2.5,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#3fb950'
-                        },
-                        { 
-                            data: Array(4).fill(meta), 
-                            borderColor: '#ee4d2d', 
-                            borderDash: [4, 4], 
-                            pointRadius: 0, 
-                            borderWidth: 1,
-                            datalabels: { display: false }
-                        }
-                    ]
-                },
-                options: commonChartOptions('#3fb950', getMinMaxY(weeklyData))
-            });
+            try { gradWeekly = ctxWeekly.createLinearGradient(0, 0, 0, ctxCanvasWeekly.height || 180); gradWeekly.addColorStop(0, 'rgba(63, 185, 80, 0.3)'); gradWeekly.addColorStop(1, 'rgba(63, 185, 80, 0)'); } catch(e) { gradWeekly = 'transparent'; }
+            this.charts.indWeekly = new Chart(ctxWeekly, { type: 'line', data: { labels: weeks, datasets: [{ data: weeklyData, borderColor: '#3fb950', backgroundColor: gradWeekly, fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: '#3fb950' }, { data: Array(4).fill(meta), borderColor: '#ee4d2d', borderDash: [4, 4], pointRadius: 0, borderWidth: 1, datalabels: { display: false } }] }, options: commonChartOptions('#3fb950', getMinMaxY(weeklyData)) });
 
             const ctxCanvasMonthly = document.getElementById('chartIndMonthly');
             const ctxMonthly = ctxCanvasMonthly.getContext('2d');
             if (this.charts.indMonthly) this.charts.indMonthly.destroy();
-            
             let gradMonthly;
-            try {
-                gradMonthly = ctxMonthly.createLinearGradient(0, 0, 0, ctxCanvasMonthly.height || 180);
-                gradMonthly.addColorStop(0, 'rgba(218, 112, 214, 0.3)');
-                gradMonthly.addColorStop(1, 'rgba(218, 112, 214, 0)');
-            } catch(e) {
-                gradMonthly = 'transparent';
-            }
-
-            this.charts.indMonthly = new Chart(ctxMonthly, {
-                type: 'line',
-                data: {
-                    labels: months,
-                    datasets: [
-                        { 
-                            data: monthlyData, 
-                            borderColor: '#da70d6', 
-                            backgroundColor: gradMonthly,
-                            fill: true,
-                            tension: 0.4, 
-                            borderWidth: 2.5,
-                            pointRadius: 3,
-                            pointBackgroundColor: '#da70d6'
-                        },
-                        { 
-                            data: Array(6).fill(meta), 
-                            borderColor: '#ee4d2d', 
-                            borderDash: [4, 4], 
-                            pointRadius: 0, 
-                            borderWidth: 1,
-                            datalabels: { display: false }
-                        }
-                    ]
-                },
-                options: commonChartOptions('#da70d6', getMinMaxY(monthlyData))
-            });
+            try { gradMonthly = ctxMonthly.createLinearGradient(0, 0, 0, ctxCanvasMonthly.height || 180); gradMonthly.addColorStop(0, 'rgba(218, 112, 214, 0.3)'); gradMonthly.addColorStop(1, 'rgba(218, 112, 214, 0)'); } catch(e) { gradMonthly = 'transparent'; }
+            this.charts.indMonthly = new Chart(ctxMonthly, { type: 'line', data: { labels: months, datasets: [{ data: monthlyData, borderColor: '#da70d6', backgroundColor: gradMonthly, fill: true, tension: 0.4, borderWidth: 2.5, pointRadius: 3, pointBackgroundColor: '#da70d6' }, { data: Array(6).fill(meta), borderColor: '#ee4d2d', borderDash: [4, 4], pointRadius: 0, borderWidth: 1, datalabels: { display: false } }] }, options: commonChartOptions('#da70d6', getMinMaxY(monthlyData)) });
         },
 
         renderIndicatorHeatmaps(key) {
             const shifts = Dashboard.turnosEixo.slice(0, 3);
             const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-            
             let hTurnos = `<div class="heatmap-grid"><div></div>` + days.map(d => `<div class="heatmap-header-cell">${d}</div>`).join('') + `</div>`;
-            shifts.forEach(t => {
-                hTurnos += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + days.map((d, idx) => {
-                    const cellRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected && r.turno === t && r.diaSemana === d);
-                    const realVal = this.calculateRealMetric(cellRows, this.indicatorSelected);
-                    const value = realVal !== null ? realVal : this.getDeterministicValue(key + '_hmT_' + t + '_' + idx, 88.5, 99.3);
-                    
-                    const alpha = value > 95 ? 0.8 : (value > 90 ? 0.5 : 0.25);
-                    const color = value > 95 ? `rgba(63, 185, 80, ${alpha})` : (value > 90 ? `rgba(210, 153, 34, ${alpha})` : `rgba(238, 77, 45, ${alpha})`);
-                    return `<div class="heatmap-cell" style="background:${color}" title="${t} - ${d}: ${value.toFixed(1)}%"><span class="count" style="font-size:10px;">${value.toFixed(1)}%</span></div>`;
-                }).join('') + `</div>`;
-            });
+            shifts.forEach(t => { hTurnos += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + days.map((d, idx) => { const cellRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected && r.turno === t && r.diaSemana === d); const realVal = this.calculateRealMetric(cellRows, this.indicatorSelected); const value = realVal !== null ? realVal : this.getDeterministicValue(key + '_hmT_' + t + '_' + idx, 88.5, 99.3); const alpha = value > 95 ? 0.8 : (value > 90 ? 0.5 : 0.25); const color = value > 95 ? `rgba(63, 185, 80, ${alpha})` : (value > 90 ? `rgba(210, 153, 34, ${alpha})` : `rgba(238, 77, 45, ${alpha})`); return `<div class="heatmap-cell" style="background:${color}" title="${t} - ${d}: ${value.toFixed(1)}%"><span class="count" style="font-size:10px;">${value.toFixed(1)}%</span></div>`; }).join('') + `</div>`; });
             document.getElementById('indTurnoHeatmapContainer').innerHTML = hTurnos;
-
-            const supervisores = [...new Set(Dashboard.rawData
-                .filter(d => d.cd === this.cdSelected && d.area.toUpperCase().trim() === this.areaSelected.toUpperCase().trim())
-                .map(d => d.responsavel)
-            )].filter(Boolean);
-
+            const supervisores = [...new Set(Dashboard.rawData.filter(d => d.cd === this.cdSelected && d.area.toUpperCase().trim() === this.areaSelected.toUpperCase().trim()).map(d => d.responsavel))].filter(Boolean);
             const fallbackSups = ["L. Fernandes", "G. Pernia", "D. Belmonte", "M. Martins", "P. Roberto", "A. Moraes", "W. Sabino", "T. Oliveira"];
             const listaSups = supervisores.length > 0 ? supervisores : fallbackSups;
-
             let hSupervisores = `<div style="display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 8px;">`;
-            listaSups.slice(0, 8).forEach(sup => {
-                const supRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected && r.responsavel === sup);
-                const realVal = this.calculateRealMetric(supRows, this.indicatorSelected);
-                const value = realVal !== null ? realVal : this.getDeterministicValue(key + '_hmS_' + sup, 87.5, 98.8);
-                
-                const color = value > 95 ? 'var(--accent-green)' : (value > 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
-                hSupervisores += `
-                    <div style="background: var(--bg-input); border: 1px solid ${color}; border-radius: 6px; padding: 8px; text-align: center;">
-                        <div style="font-size: 10px; font-weight: 700; color: var(--text-main); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${sup}">${sup}</div>
-                        <div style="font-size: 13px; font-weight: 800; color: ${color}; margin-top: 4px;">${value.toFixed(1)}%</div>
-                        <div style="font-size: 8px; color: var(--text-dim); margin-top: 2px;">Atingimento da Meta</div>
-                    </div>
-                `;
-            });
+            listaSups.slice(0, 8).forEach(sup => { const supRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected && r.responsavel === sup); const realVal = this.calculateRealMetric(supRows, this.indicatorSelected); const value = realVal !== null ? realVal : this.getDeterministicValue(key + '_hmS_' + sup, 87.5, 98.8); const color = value > 95 ? 'var(--accent-green)' : (value > 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)'); hSupervisores += `<div style="background: var(--bg-input); border: 1px solid ${color}; border-radius: 6px; padding: 8px; text-align: center;"><div style="font-size: 10px; font-weight: 700; color: var(--text-main); text-overflow: ellipsis; white-space: nowrap; overflow: hidden;" title="${sup}">${sup}</div><div style="font-size: 13px; font-weight: 800; color: ${color}; margin-top: 4px;">${value.toFixed(1)}%</div><div style="font-size: 8px; color: var(--text-dim); margin-top: 2px;">Atingimento da Meta</div></div>`; });
             hSupervisores += `</div>`;
             document.getElementById('indSupervisorHeatmapContainer').innerHTML = hSupervisores;
         }
