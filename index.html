@@ -638,6 +638,21 @@
             </div>
         </div>
 
+        <div class="charts-container" style="padding-top: 5px;">
+            <div class="chart-box c-span-6">
+                <div class="chart-box-header">
+                    <div class="chart-title-left"><i class="fas fa-chart-line" style="color: var(--accent-green)"></i> Evolução Diária da Meta x Realizado</div>
+                </div>
+                <canvas id="chartCdMetaReal"></canvas>
+            </div>
+            <div class="chart-box c-span-6" style="height: auto; min-height: 230px;">
+                <div class="chart-box-header">
+                    <div class="chart-title-left"><i class="fas fa-th" style="color: var(--accent-yellow)"></i> Heatmap de Utilização por CD</div>
+                </div>
+                <div id="cdHeatmapContainer" style="padding: 5px 0;"></div>
+            </div>
+        </div>
+
         <!-- TRANSIÇÃO NÍVEL 3 — SELEÇÃO DE ÁREA -->
         <div class="nav-transition-box" id="transition-area-box">
             <div style="display: flex; align-items: center; gap: 8px;">
@@ -682,6 +697,21 @@
                     <div class="kpi-label">DDQA da Área</div>
                     <div class="kpi-value" style="color: var(--accent-purple);" id="area-ddqa-val">-</div>
                 </div>
+            </div>
+        </div>
+
+        <div class="charts-container" style="padding-top: 5px;">
+            <div class="chart-box c-span-6">
+                <div class="chart-box-header">
+                    <div class="chart-title-left"><i class="fas fa-chart-line" style="color: var(--accent-purple)"></i> Distribuição Realizado x Meta</div>
+                </div>
+                <canvas id="chartAreaMetaReal"></canvas>
+            </div>
+            <div class="chart-box c-span-6">
+                <div class="chart-box-header">
+                    <div class="chart-title-left"><i class="fas fa-users" style="color: var(--accent-green)"></i> Desempenho Operacional de Turnos</div>
+                </div>
+                <canvas id="chartAreaTurnos"></canvas>
             </div>
         </div>
 
@@ -940,7 +970,7 @@
             const idle = IdleDashboard.calculateMetric(this.filteredData, "IDLE") || 0;
             const el = document.getElementById('kpi-idle-valor');
             el.innerText = idle.toFixed(1) + "%";
-            el.style.color = idle >= 95 ? 'var(--accent-green)' : 'var(--shopee-orange)';
+            el.style.color = idle >= 95 ? 'var(--accent-green)' : (idle >= 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
         },
 
         createCharts() {
@@ -960,13 +990,12 @@
             this.charts.turno = new Chart(document.getElementById('chartTurno'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#ee4d2d', data: [] }] }, options: commonOpt });
             this.charts.cd = new Chart(document.getElementById('chartCD'), { type: 'bar', data: { labels: [], datasets: [{ backgroundColor: '#2f81f7', data: [] }] }, options: commonOpt });
             
-            // CORREÇÃO DO GRÁFICO DE ÁREA: ORIENTAÇÃO HORIZONTAL E ESCALAS
             this.charts.area = new Chart(document.getElementById('chartArea'), { 
                 type: 'bar', 
                 data: { labels: [], datasets: [{ backgroundColor: '#8957e5', data: [] }] }, 
                 options: { 
                     ...commonOpt, 
-                    indexAxis: 'y', // Barras Horizontais
+                    indexAxis: 'y',
                     scales: {
                         x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } },
                         y: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 10 } } }
@@ -1042,14 +1071,14 @@
             rows.forEach(r => {
                 let v = null; const t = type.toUpperCase();
                 if (t === "IDLE") {
-                    if (r.idle_p) v = parseFloat(r.idle_p.toString().replace('%','').replace(',','.'));
+                    if (r.idle_p && r.idle_p !== "") v = parseFloat(r.idle_p.toString().replace('%','').replace(',','.'));
                     else if (r.idle_b && r.idle_r) {
-                        const b = parseFloat(r.idle_b.toString().replace(',','.')), re = parseFloat(r.idle_r.toString().replace(',','.'));
+                        const b = parseFloat(r.idle_b.replace(',','.')), re = parseFloat(r.idle_r.replace(',','.'));
                         if (b > 0) v = (re / b) * 100;
                     }
-                } else if (t === "OPA") v = (r.opa.toUpperCase().includes("SIM") || r.opa.toUpperCase().includes("OK")) ? 100 : 0;
-                else if (t === "DDSMA") v = (r.ddsma.toUpperCase().includes("SIM") || r.ddsma.toUpperCase().includes("OK")) ? 100 : 0;
-                else if (t === "DDQA") v = (r.ddqa.toUpperCase().includes("SIM") || r.ddqa.toUpperCase().includes("OK")) ? 100 : 0;
+                } else if (t === "OPA") v = (r.opa.toUpperCase() === "SIM" || r.opa.toUpperCase() === "OK") ? 100 : 0;
+                else if (t === "DDSMA") v = (r.ddsma.toUpperCase() === "SIM" || r.ddsma.toUpperCase() === "OK") ? 100 : 0;
+                else if (t === "DDQA") v = (r.ddqa.toUpperCase() === "SIM" || r.ddqa.toUpperCase() === "OK") ? 100 : 0;
                 if (v !== null && !isNaN(v)) { sum += Math.min(v, 100); count++; }
             });
             return count > 0 ? (sum / count) : 0;
@@ -1077,7 +1106,7 @@
 
         onSelectCD(val) {
             this.cd = val; this.area = ''; this.ind = ''; if (!val) { this.resetToLevel(1); return; }
-            document.getElementById('cd-display-name').innerText = val;
+            document.getElementById('cd-display-name').innerText = "Visão CD: " + val;
             document.getElementById('idle-nivel-2').classList.remove('hidden');
             const areas = [...new Set(Dashboard.rawData.filter(d => d.cd === val).map(d => d.area))].filter(Boolean).sort();
             document.getElementById('idle-area-selector').innerHTML = '<option value="">Selecione a Área</option>' + areas.map(a => `<option value="${a}">${a}</option>`).join('');
@@ -1090,13 +1119,45 @@
             this.updateCard('cd-opa', this.calculateMetric(d, 'OPA'), 95);
             this.updateCard('cd-ddsma', this.calculateMetric(d, 'DDSMA'), 95);
             this.updateCard('cd-ddqa', this.calculateMetric(d, 'DDQA'), 95);
+            this.renderCdCharts(); this.renderCdHeatmap();
+        },
+
+        renderCdCharts() {
+            if (this.charts.cdMetaReal) this.charts.cdMetaReal.destroy();
+            const ctx = document.getElementById('chartCdMetaReal').getContext('2d');
+            const d = Dashboard.filteredData.filter(x => x.cd === this.cd);
+            const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
+            this.charts.cdMetaReal = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: days,
+                    datasets: [{ label: 'Realizado', data: days.map(day => this.calculateMetric(d.filter(x => x.diaSem.includes(day)), 'IDLE')), borderColor: '#00f2fe', tension: 0.4 },
+                               { label: 'Meta', data: Array(7).fill(95), borderColor: '#ee4d2d', borderDash: [5, 5], pointRadius: 0 }]
+                },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: true, labels: { color: '#8b949e' } }, datalabels: { display: false } } }
+            });
+        },
+
+        renderCdHeatmap() {
+            const d = Dashboard.filteredData.filter(x => x.cd === this.cd);
+            const matrix = {}; const shifts = ["T1", "T2", "T3"];
+            shifts.forEach(s => { matrix[s] = {}; this.dias.forEach(day => matrix[s][day] = this.calculateMetric(d.filter(x => x.turno === s && x.diaSem === day), 'IDLE')); });
+            let h = `<div class="heatmap-grid"><div></div>` + this.dias.map(day => `<div class="heatmap-header-cell">${day.substring(0,3)}</div>`).join('') + `</div>`;
+            shifts.forEach(s => {
+                h += `<div class="heatmap-grid"><div class="heatmap-row-label">${s}</div>` + this.dias.map(day => {
+                    const v = matrix[s][day] || 0;
+                    return `<div class="heatmap-cell" style="background:rgba(57, 197, 207, ${v/100})"><span class="count" style="font-size:9px">${v.toFixed(1)}%</span></div>`;
+                }).join('') + `</div>`;
+            });
+            document.getElementById('cdHeatmapContainer').innerHTML = h;
         },
 
         onSelectArea(val) {
             this.area = val; this.ind = ''; if (!val) { this.resetToLevel(2); return; }
-            document.getElementById('area-display-name').innerText = val;
+            document.getElementById('area-display-name').innerText = "Área: " + val;
             document.getElementById('idle-nivel-3').classList.remove('hidden');
-            document.getElementById('idle-indicator-selector').innerHTML = '<option value="">Selecione o Indicador</option>' + ["IDLE TIME", "OPA", "DDSMA", "DDQA"].map(i => `<option value="${i}">${i}</option>`).join('');
+            const indicators = ["IDLE TIME", "OPA", "DDSMA", "DDQA"];
+            document.getElementById('idle-indicator-selector').innerHTML = '<option value="">Selecione o Indicador</option>' + indicators.map(i => `<option value="${i}">${i}</option>`).join('');
             this.renderLevel3(); this.updateBread();
         },
 
@@ -1104,6 +1165,20 @@
             const d = Dashboard.filteredData.filter(x => x.cd === this.cd && x.area === this.area);
             this.updateCard('area-idle', this.calculateMetric(d, 'IDLE'), 95);
             this.updateCard('area-opa', this.calculateMetric(d, 'OPA'), 95);
+            this.updateCard('area-ddsma', this.calculateMetric(d, 'DDSMA'), 95);
+            this.updateCard('area-ddqa', this.calculateMetric(d, 'DDQA'), 95);
+            this.renderAreaCharts();
+        },
+
+        renderAreaCharts() {
+            if (this.charts.areaMetaReal) this.charts.areaMetaReal.destroy();
+            const ctx = document.getElementById('chartAreaMetaReal').getContext('2d');
+            const d = Dashboard.filteredData.filter(x => x.cd === this.cd && x.area === this.area);
+            this.charts.areaMetaReal = new Chart(ctx, {
+                type: 'bar',
+                data: { labels: ['Realizado', 'Meta'], datasets: [{ data: [this.calculateMetric(d, 'IDLE'), 95], backgroundColor: ['#8957e5', '#30363d'] }] },
+                options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { display: false } } }
+            });
         },
 
         onSelectIndicator(val) {
@@ -1116,7 +1191,6 @@
         renderLevel4() {
             const d = Dashboard.filteredData.filter(x => x.cd === this.cd && x.area === this.area);
             const v = this.calculateMetric(d, this.ind === "IDLE TIME" ? "IDLE" : this.ind) || 0;
-            document.getElementById('ind-meta-val').innerText = "95.0%";
             document.getElementById('ind-realizado-val').innerText = v.toFixed(1) + "%";
             const g = v - 95;
             document.getElementById('ind-gap-val').innerText = (g >= 0 ? "+" : "") + g.toFixed(1) + "%";
