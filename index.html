@@ -1,5 +1,3 @@
---- START OF FILE Paste July 14, 2026 - 5:18PM ---
-
 <!DOCTYPE html>
 <html lang="pt-br">
 <head>
@@ -917,19 +915,17 @@
 
         const headers = parseLine(lines[0]);
         const headerMap = {};
+        
+        // CORREÇÃO LÓGICA: Detecção fuzzy de cabeçalhos para mapear chaves fixas do código
         headers.forEach((h, idx) => {
             const n = h.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
-            if (n.includes("DATA REGISTRO")) headerMap.dataHora = idx;
-            else if (n.includes("CD OPERACIONAL")) headerMap.cd = idx;
+            if (n.includes("DATA") || n.includes("CARIMBO")) headerMap.dataHora = idx;
+            else if (n.includes("CD") || n.includes("CENTRO")) headerMap.cd = idx;
             else if (n.includes("TURNO")) headerMap.turno = idx;
-            else if (n.includes("RESPONSAVEL")) headerMap.responsavel = idx;
+            else if (n.includes("RESPONSAVEL") || n.includes("NOME")) headerMap.responsavel = idx;
             else if (n.includes("CARGO")) headerMap.cargo = idx;
-            else if (n.includes("AREA ATUACAO")) headerMap.area = idx;
-            else if (n.includes("IDLE TIME %")) headerMap.idlePct = idx;
-            else if (n.includes("OPA")) headerMap.opa = idx;
-            else if (n.includes("DDSMA")) headerMap.ddsma = idx;
-            else if (n.includes("DDQA")) headerMap.ddqa = idx;
-            else headerMap[n] = idx;
+            else if (n.includes("AREA") || n.includes("ATUACAO")) headerMap.area = idx;
+            else headerMap[n] = idx; // Mantém o nome original para outras colunas
         });
 
         const data = [];
@@ -937,9 +933,18 @@
             if (!lines[i].trim()) continue;
             const cols = parseLine(lines[i]);
             const obj = {};
+            // Garante que o objeto tenha as chaves esperadas pelo sistema
             Object.keys(headerMap).forEach(key => {
                 obj[key] = cols[headerMap[key]] || "";
             });
+            // Atribui especificamente as chaves fixas caso não existam
+            if (!obj.dataHora) obj.dataHora = cols[headerMap.dataHora] || "";
+            if (!obj.cd) obj.cd = cols[headerMap.cd] || "";
+            if (!obj.turno) obj.turno = cols[headerMap.turno] || "";
+            if (!obj.responsavel) obj.responsavel = cols[headerMap.responsavel] || "";
+            if (!obj.cargo) obj.cargo = cols[headerMap.cargo] || "";
+            if (!obj.area) obj.area = cols[headerMap.area] || "";
+            
             data.push(obj);
         }
         return data;
@@ -992,8 +997,16 @@
         processSpreadsheetData(data) {
             if (!Array.isArray(data)) data = [];
             this.rawData = data.map(item => {
-                const parts = (item.dataHora || "").split(' ')[0].split('/');
-                const dObj = parts.length === 3 ? new Date(parts[2], parts[1]-1, parts[0]) : new Date();
+                // CORREÇÃO LÓGICA: Parsing de data robusto
+                const rawDate = item.dataHora || "";
+                const parts = rawDate.split(' ')[0].split('/');
+                let dObj;
+                if (parts.length === 3) {
+                    dObj = new Date(parts[2], parts[1]-1, parts[0]);
+                } else {
+                    dObj = new Date();
+                }
+                
                 const cd = (item.cd || "").toUpperCase().trim();
                 return {
                     ...item,
@@ -1012,6 +1025,7 @@
         buildDropdowns() {
             const inject = (id, list) => {
                 const el = document.getElementById(id);
+                if (!el) return;
                 const current = el.value;
                 el.innerHTML = `<option value="">Todos</option>` + list.map(v => `<option value="${v}">${v}</option>`).join('');
                 el.value = current;
@@ -1020,7 +1034,11 @@
             inject('filter-turno', this.turnosEixo);
             inject('filter-cd', this.listaCDsGerais);
             inject('filter-cargo', [...new Set(this.rawData.map(d => d.cargo))].filter(Boolean).sort());
-            document.getElementById('dropdownHeatmapCD').innerHTML = `<option value="GERAL">Visão Geral</option>` + this.listaCDsGerais.map(v => `<option value="${v}">${v}</option>`).join('');
+            
+            const dropHeat = document.getElementById('dropdownHeatmapCD');
+            if (dropHeat) {
+                dropHeat.innerHTML = `<option value="GERAL">Visão Geral</option>` + this.listaCDsGerais.map(v => `<option value="${v}">${v}</option>`).join('');
+            }
         },
 
         applyFilters() {
@@ -1049,13 +1067,18 @@
 
         updateKPIs() {
             document.getElementById('kpi-total').innerText = this.filteredData.length;
-            const idle = IdleDashboard.calculateRealMetric(this.filteredData, "idlePct");
+            // CORREÇÃO LÓGICA: Busca exata pelo IDLE TIME % conforme regra
+            const idle = IdleDashboard.calculateRealMetric(this.filteredData, "IDLE");
             const el = document.getElementById('kpi-idle-valor');
-            el.innerText = idle.toFixed(1) + "%";
-            el.style.color = idle >= 95 ? 'var(--accent-green)' : (idle >= 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
+            if (el) {
+                el.innerText = idle.toFixed(1) + "%";
+                el.style.color = idle >= 95 ? 'var(--accent-green)' : (idle >= 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
+            }
             
             const turnos = {};
-            this.filteredData.forEach(d => turnos[d.turno] = (turnos[d.turno] || 0) + 1);
+            this.filteredData.forEach(d => {
+                if(d.turno) turnos[d.turno] = (turnos[d.turno] || 0) + 1;
+            });
             document.getElementById('kpi-turno').innerText = Object.keys(turnos).sort((a,b) => turnos[b]-turnos[a])[0] || "-";
         },
 
@@ -1087,37 +1110,42 @@
             this.charts.area.update();
 
             this.idleCharts.cd.data.labels = this.listaCDsGerais;
-            this.idleCharts.cd.data.datasets[0].data = this.listaCDsGerais.map(c => IdleDashboard.calculateRealMetric(this.rawData.filter(d => d.cd === c), "idlePct"));
+            this.idleCharts.cd.data.datasets[0].data = this.listaCDsGerais.map(c => IdleDashboard.calculateRealMetric(this.rawData.filter(d => d.cd === c), "IDLE"));
             this.idleCharts.cd.update();
 
             this.idleCharts.turno.data.labels = this.turnosEixo;
-            this.idleCharts.turno.data.datasets[0].data = this.turnosEixo.map(t => IdleDashboard.calculateRealMetric(this.rawData.filter(d => d.turno === t), "idlePct"));
+            this.idleCharts.turno.data.datasets[0].data = this.turnosEixo.map(t => IdleDashboard.calculateRealMetric(this.rawData.filter(d => d.turno === t), "IDLE"));
             this.idleCharts.turno.update();
         },
 
         renderHeatmap() {
-            const target = document.getElementById('dropdownHeatmapCD').value;
+            const dropHeat = document.getElementById('dropdownHeatmapCD');
+            const target = dropHeat ? dropHeat.value : "GERAL";
             const data = target === "GERAL" ? this.filteredData : this.filteredData.filter(d => d.cd === target);
             const matrix = {};
             const turnos = ["T1", "T2", "T3"];
             turnos.forEach(t => { matrix[t] = {}; this.diasSemanaEixo.forEach(d => matrix[t][d] = 0); });
-            data.forEach(d => { if(matrix[d.turno]) matrix[d.turno][d.diaSemana]++; });
+            data.forEach(d => { if(matrix[d.turno] && matrix[d.turno][d.diaSemana] !== undefined) matrix[d.turno][d.diaSemana]++; });
 
             let h = `<div class="heatmap-grid"><div></div>` + this.diasSemanaEixo.map(d => `<div class="heatmap-header-cell">${d.substring(0,3)}</div>`).join('') + `</div>`;
             turnos.forEach(t => {
                 h += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + this.diasSemanaEixo.map(d => {
                     const c = matrix[t][d];
-                    const a = c > 0 ? Math.min(c/10, 0.9) : 0.05;
+                    const a = c > 0 ? Math.min(c/5, 0.9) : 0.05;
                     return `<div class="heatmap-cell" style="background:rgba(238,77,45,${a})"><span class="count">${c}</span></div>`;
                 }).join('') + `</div>`;
             });
-            document.getElementById('heatmapContainer').innerHTML = h;
+            const cont = document.getElementById('heatmapContainer');
+            if (cont) cont.innerHTML = h;
         },
 
         renderTable() {
-            document.getElementById('tableBody').innerHTML = this.filteredData.slice(0, 100).map(d => `
-                <tr><td>${d.dataHora}</td><td>${d.cd}</td><td>${d.turno}</td><td>${d.responsavel}</td><td>${d.cargo}</td><td>${d.area}</td></tr>
-            `).join('');
+            const tb = document.getElementById('tableBody');
+            if (tb) {
+                tb.innerHTML = this.filteredData.slice(0, 100).map(d => `
+                    <tr><td>${d.dataHora}</td><td>${d.cd}</td><td>${d.turno}</td><td>${d.responsavel}</td><td>${d.cargo}</td><td>${d.area}</td></tr>
+                `).join('');
+            }
         },
 
         toggleAnalysisMode() {
@@ -1132,28 +1160,25 @@
     const IdleDashboard = {
         cdSelected: '', areaSelected: '', indicatorSelected: '', charts: {},
 
-        calculateRealMetric(rows, metricKey) {
+        // CORREÇÃO LÓGICA: Buscador de métricas inteligente para colunas da planilha
+        calculateRealMetric(rows, metricName) {
             if (!Array.isArray(rows) || rows.length === 0) return 0;
             let sum = 0, count = 0;
+            const targetKey = metricName.toUpperCase().trim();
+            
             rows.forEach(r => {
-                const val = r[metricKey];
+                // Procura a coluna que contenha o nome da métrica (Ex: busca "IDLE" e encontra "IDLE TIME %")
+                const actualKey = Object.keys(r).find(k => k.toUpperCase().includes(targetKey));
+                const val = r[actualKey];
                 if (val === undefined || val === null || val === "") return;
+                
                 let n = 0;
                 const s = val.toString().toUpperCase().trim();
-                // Tratamento para Indicadores de Texto (Checkboxes da Planilha)
-                if (["SIM", "OK", "REALIZADO"].includes(s)) {
-                    n = 100;
-                    sum += n;
-                    count++;
-                } else if (["NAO", "NÃO", "PENDENTE"].includes(s)) {
-                    n = 0;
-                    sum += n;
-                    count++;
-                } else {
-                    // Tratamento para Campos Numéricos e Percentuais
-                    n = parseFloat(s.replace("%", "").replace(",", "."));
-                    if (!isNaN(n)) { sum += n; count++; }
-                }
+                if (["SIM", "OK", "REALIZADO"].includes(s)) n = 100;
+                else if (["NAO", "NÃO", "PENDENTE"].includes(s)) n = 0;
+                else n = parseFloat(s.replace("%", "").replace(",", "."));
+                
+                if (!isNaN(n)) { sum += n; count++; }
             });
             return count > 0 ? sum / count : 0;
         },
@@ -1161,7 +1186,9 @@
         init() {
             this.refreshData();
             const sel = document.getElementById('idle-cd-selector');
-            sel.innerHTML = `<option value="">Selecione o CD</option>` + Dashboard.listaCDsGerais.map(c => `<option value="${c}">${c}</option>`).join('');
+            if (sel) {
+                sel.innerHTML = `<option value="">Selecione o CD</option>` + Dashboard.listaCDsGerais.map(c => `<option value="${c}">${c}</option>`).join('');
+            }
         },
 
         refreshData() {
@@ -1173,17 +1200,23 @@
 
         renderLevel1Brasil() {
             const data = Dashboard.rawData;
-            const idle = this.calculateRealMetric(data, "idlePct");
-            const opa = this.calculateRealMetric(data, "opa");
-            const ddsma = this.calculateRealMetric(data, "ddsma");
-            const ddqa = this.calculateRealMetric(data, "ddqa");
+            const idle = this.calculateRealMetric(data, "IDLE");
+            const opa = this.calculateRealMetric(data, "OPA");
+            const ddsma = this.calculateRealMetric(data, "DDSMA");
+            const ddqa = this.calculateRealMetric(data, "DDQA");
 
             const update = (id, val, meta) => {
                 const el = document.getElementById(id);
+                if (!el) return;
                 el.innerText = val.toFixed(1) + "%";
-                const trend = el.parentElement.nextElementSibling.querySelector('.kpi-trend');
-                trend.innerText = val >= meta ? "Meta OK" : "Gap: " + (val - meta).toFixed(1) + "%";
-                trend.className = "kpi-trend " + (val >= meta ? "trend-up" : "trend-danger");
+                const parent = el.parentElement.nextElementSibling;
+                if (parent) {
+                    const trend = parent.querySelector('.kpi-trend');
+                    if (trend) {
+                        trend.innerText = val >= meta ? "Meta OK" : "Gap: " + (val - meta).toFixed(1) + "%";
+                        trend.className = "kpi-trend " + (val >= meta ? "trend-up" : "trend-danger");
+                    }
+                }
             };
             update('br-idle-val', idle, 95);
             update('br-opa-val', opa, 95);
@@ -1197,35 +1230,30 @@
             document.getElementById('idle-nivel-2').classList.toggle('hidden', !cd);
             if (!cd) return;
             const areas = [...new Set(Dashboard.rawData.filter(d => d.cd === cd).map(d => d.area))].filter(Boolean).sort();
-            document.getElementById('idle-area-selector').innerHTML = `<option value="">Selecione</option>` + areas.map(a => `<option value="${a}">${a}</option>`).join('');
+            const selArea = document.getElementById('idle-area-selector');
+            if (selArea) {
+                selArea.innerHTML = `<option value="">Selecione</option>` + areas.map(a => `<option value="${a}">${a}</option>`).join('');
+            }
             this.renderCdLevel();
         },
 
         renderCdLevel() {
             const data = Dashboard.rawData.filter(d => d.cd === this.cdSelected);
-            document.getElementById('cd-idle-val').innerText = this.calculateRealMetric(data, "idlePct").toFixed(1) + "%";
-            document.getElementById('cd-opa-val').innerText = this.calculateRealMetric(data, "opa").toFixed(1) + "%";
-            document.getElementById('cd-ddsma-val').innerText = this.calculateRealMetric(data, "ddsma").toFixed(1) + "%";
-            document.getElementById('cd-ddqa-val').innerText = this.calculateRealMetric(data, "ddqa").toFixed(1) + "%";
+            document.getElementById('cd-idle-val').innerText = this.calculateRealMetric(data, "IDLE").toFixed(1) + "%";
+            document.getElementById('cd-opa-val').innerText = this.calculateRealMetric(data, "OPA").toFixed(1) + "%";
+            document.getElementById('cd-ddsma-val').innerText = this.calculateRealMetric(data, "DDSMA").toFixed(1) + "%";
+            document.getElementById('cd-ddqa-val').innerText = this.calculateRealMetric(data, "DDQA").toFixed(1) + "%";
             this.renderCdCharts();
         },
 
         renderCdCharts() {
-            const ctx = document.getElementById('chartCdMetaReal').getContext('2d');
+            const can = document.getElementById('chartCdMetaReal');
+            if (!can) return;
+            const ctx = can.getContext('2d');
             if (this.charts.cdLine) this.charts.cdLine.destroy();
             const days = ["Segunda", "Terça", "Quarta", "Quinta", "Sexta", "Sábado", "Domingo"];
-            const data = days.map(d => this.calculateRealMetric(Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.diaSemana === d), "idlePct"));
-            this.charts.cdLine = new Chart(ctx, { 
-                type: 'line', 
-                data: { 
-                    labels: days, 
-                    datasets: [
-                        { label: 'Real', data: data, borderColor: '#00f2fe', tension: 0.4 }, 
-                        { label: 'Meta', data: Array(7).fill(95), borderColor: '#ee4d2d', borderDash: [5,5] }
-                    ] 
-                }, 
-                options: { responsive: true, maintainAspectRatio: false } 
-            });
+            const data = days.map(d => this.calculateRealMetric(Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.diaSemana === d), "IDLE"));
+            this.charts.cdLine = new Chart(ctx, { type: 'line', data: { labels: days, datasets: [{ label: 'Real', data: data, borderColor: '#00f2fe', tension: 0.4 }, { label: 'Meta', data: Array(7).fill(95), borderColor: '#ee4d2d', borderDash: [5,5] }] }, options: { responsive: true, maintainAspectRatio: false } });
         },
 
         onSelectArea(area) {
@@ -1233,23 +1261,25 @@
             document.getElementById('area-display-name').innerText = area || "-";
             document.getElementById('idle-nivel-3').classList.toggle('hidden', !area);
             if (!area) return;
-            // Indicadores derivam das colunas mapeadas da planilha
-            const inds = ["ddsma", "ddqa", "idlePct", "opa"];
-            document.getElementById('idle-indicator-selector').innerHTML = `<option value="">Selecione</option>` + inds.map(i => `<option value="${i}">${i.toUpperCase()}</option>`).join('');
+            const inds = ["DDSMA", "DDQA", "IDLE TIME %", "OPA"];
+            const selInd = document.getElementById('idle-indicator-selector');
+            if (selInd) {
+                selInd.innerHTML = `<option value="">Selecione</option>` + inds.map(i => `<option value="${i}">${i}</option>`).join('');
+            }
             this.renderAreaLevel();
         },
 
         renderAreaLevel() {
             const data = Dashboard.rawData.filter(d => d.cd === this.cdSelected && d.area === this.areaSelected);
-            document.getElementById('area-idle-val').innerText = this.calculateRealMetric(data, "idlePct").toFixed(1) + "%";
-            document.getElementById('area-opa-val').innerText = this.calculateRealMetric(data, "opa").toFixed(1) + "%";
-            document.getElementById('area-ddsma-val').innerText = this.calculateRealMetric(data, "ddsma").toFixed(1) + "%";
-            document.getElementById('area-ddqa-val').innerText = this.calculateRealMetric(data, "ddqa").toFixed(1) + "%";
+            document.getElementById('area-idle-val').innerText = this.calculateRealMetric(data, "IDLE").toFixed(1) + "%";
+            document.getElementById('area-opa-val').innerText = this.calculateRealMetric(data, "OPA").toFixed(1) + "%";
+            document.getElementById('area-ddsma-val').innerText = this.calculateRealMetric(data, "DDSMA").toFixed(1) + "%";
+            document.getElementById('area-ddqa-val').innerText = this.calculateRealMetric(data, "DDQA").toFixed(1) + "%";
         },
 
         onSelectIndicator(ind) {
             this.indicatorSelected = ind;
-            document.getElementById('indicator-display-name').innerText = ind.toUpperCase() || "-";
+            document.getElementById('indicator-display-name').innerText = ind || "-";
             document.getElementById('idle-nivel-4').classList.toggle('hidden', !ind);
             if (ind) this.renderIndicatorLevel();
         },
@@ -1261,9 +1291,12 @@
             document.getElementById('ind-realizado-val').innerText = val.toFixed(1) + "%";
             const gap = val - 95;
             const gEl = document.getElementById('ind-gap-val');
-            gEl.innerText = (gap >= 0 ? "+" : "") + gap.toFixed(1) + "%";
-            gEl.style.color = gap >= 0 ? 'var(--accent-green)' : 'var(--shopee-orange)';
-            document.getElementById('ind-status-val').innerText = gap >= 0 ? "DENTRO DA META" : "FORA DA META";
+            if (gEl) {
+                gEl.innerText = (gap >= 0 ? "+" : "") + gap.toFixed(1) + "%";
+                gEl.style.color = gap >= 0 ? 'var(--accent-green)' : 'var(--shopee-orange)';
+            }
+            const sEl = document.getElementById('ind-status-val');
+            if (sEl) sEl.innerText = gap >= 0 ? "DENTRO DA META" : "FORA DA META";
         }
     };
 
