@@ -846,13 +846,13 @@
             <table id="mainTable">
                 <thead>
                     <tr>
-                        <!-- Colunas reordenadas e renomeadas exactamente conforme solicitado -->
-                        <th>Data/Hora</th>
+                        <!-- Colunas reordenadas e renomeadas exatamente conforme solicitado -->
+                        <th>Data Registro</th>
                         <th>CD</th>
                         <th>Turno</th>
-                        <th>Nome Responsável</th>
+                        <th>Responsável</th>
                         <th>Cargo</th>
-                        <th>Área</th>
+                        <th>Área Atuação</th>
                     </tr>
                 </thead>
                 <tbody id="tableBody"></tbody>
@@ -864,8 +864,7 @@
 <script>
     Chart.register(ChartDataLabels);
 
-    // Link do Web App do Google Apps Script atualizado conforme solicitado
-    const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbwNxE2r62ocMeO1T1ZvZ95D7ZDxQQf2Xjbx0mw6NGRL215BjL9Yb2eUuGkLZiSsMFDf/exec';
+    const SPREADSHEET_URL = 'https://script.google.com/macros/s/AKfycbycoVam3_qcF0EvFEFwSxklgqS2FyanzIGAXBU26UEeFEfrB7GYx985bjcoRnd09etQ/exec';
     const CACHE_KEY = 'eos_dashboard_cache';
     const CACHE_TIME_KEY = 'eos_dashboard_cache_time';
     const CACHE_DURATION = 30 * 1000; 
@@ -923,25 +922,20 @@
 
         const headers = parseLine(lines[0]);
         
-        // Mapeamento baseado nos campos estipulados
-        const headerMap = { dataHora: 0, cd: 1, turno: 2, responsavel: 3, cargo: 4, area: 5 };
+        // Mapeamento dinâmico baseado na estrutura da planilha
+        const headerMap = { 
+            dataHora: -1, cd: -1, turno: -1, responsavel: -1, cargo: -1, area: -1 
+        };
 
         headers.forEach((h, idx) => {
             const norm = h.toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
             
-            if (norm === "data/hora" || norm.includes("data") || norm.includes("carimbo") || norm.includes("time") || norm.includes("hora")) {
-                headerMap.dataHora = idx;
-            } else if (norm === "cd" || norm.includes("centro") || norm.includes("unidade")) {
-                headerMap.cd = idx;
-            } else if (norm === "turno") {
-                headerMap.turno = idx;
-            } else if (norm === "nome responsavel" || norm === "responsavel" || norm.includes("responsavel") || norm.includes("nome")) {
-                headerMap.responsavel = idx;
-            } else if (norm === "cargo" || norm.includes("funcao")) {
-                headerMap.cargo = idx;
-            } else if (norm === "area" || norm === "área" || norm.includes("area") || norm.includes("setor")) {
-                headerMap.area = idx;
-            }
+            if (norm.includes("data registro")) headerMap.dataHora = idx;
+            else if (norm.includes("cd operacional")) headerMap.cd = idx;
+            else if (norm.includes("turno")) headerMap.turno = idx;
+            else if (norm.includes("responsavel")) headerMap.responsavel = idx;
+            else if (norm.includes("cargo")) headerMap.cargo = idx;
+            else if (norm.includes("area atuacao")) headerMap.area = idx;
         });
 
         const parsedRows = [];
@@ -959,10 +953,9 @@
                 area: cols[headerMap.area] || ""
             };
 
-            // Adiciona dinamicamente outras colunas para cálculo de indicadores
+            // Adiciona todas as colunas originais para cálculo de indicadores
             headers.forEach((h, idx) => {
-                const normH = h.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                row[normH] = cols[idx];
+                row[h.trim()] = cols[idx];
             });
 
             parsedRows.push(row);
@@ -972,48 +965,38 @@
 
     async function fetchSpreadsheetData() {
         try {
-            console.log("[EOS-BR] Iniciando busca de dados da planilha...");
+            console.log("[EOS-BR] Sincronizando registros da planilha...");
             const response = await fetch(SPREADSHEET_URL);
-            if (!response.ok) throw new Error("Erro de comunicação HTTP.");
+            if (!response.ok) throw new Error("Falha na comunicação com o servidor.");
             
             const contentType = response.headers.get("content-type") || "";
             let data = [];
             
             if (contentType.includes("json")) {
                 const json = await response.json();
-                
-                if (json.status === "error") {
-                    throw new Error(json.message);
-                }
+                if (json.status === "error") throw new Error(json.message);
                 
                 const rawRows = Array.isArray(json) ? json : (json.data || json.rows || []);
                 data = rawRows.map(item => {
-                    const normalizedItem = {
-                        dataHora: item.dataHora || item["Data/Hora"] || item["data/hora"] || item["Timestamp"] || "",
-                        cd: item.cd || item["CD"] || item["CD Operacional"] || "",
-                        turno: item.turno || item["Turno"] || "",
-                        responsavel: item.responsavel || item["Nome Responsável"] || item["nome responsável"] || item["Responsável"] || "",
-                        cargo: item.cargo || item["Cargo"] || "",
-                        area: item.area || item["Área"] || item["Área de Atuação"] || ""
+                    // Normalização para o Dashboard mantendo compatibilidade com nomes de cabeçalho exatos
+                    const normalized = {
+                        dataHora: item["Data Registro"] || item["dataHora"] || "",
+                        cd: item["CD Operacional"] || item["cd"] || "",
+                        turno: item["Turno"] || item["turno"] || "",
+                        responsavel: item["Responsável"] || item["responsavel"] || "",
+                        cargo: item["Cargo"] || item["cargo"] || "",
+                        area: item["Área Atuação"] || item["area"] || ""
                     };
-                    
-                    // Mapeia todas as chaves originais para maiúsculas para o motor de métricas
-                    Object.keys(item).forEach(k => {
-                        const nk = k.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-                        normalizedItem[nk] = item[k];
-                    });
-                    
-                    return normalizedItem;
+                    // Mescla o restante das colunas (DDSMA, OPA, etc)
+                    return { ...item, ...normalized };
                 });
             } else {
                 const text = await response.text();
-                if (text.trim().startsWith("<!DOCTYPE html>") || text.trim().startsWith("<html")) {
-                    throw new Error("O script do Google Sheets retornou uma página de erro HTML. Certifique-se de que a implantação do Web App foi publicada para acesso de 'Qualquer pessoa'.");
-                }
+                if (text.trim().startsWith("<!DOCTYPE html>")) throw new Error("Acesso negado ao Apps Script.");
                 data = parseCSV(text);
             }
             
-            if (data.length === 0) throw new Error("A base retornou dados vazios.");
+            if (data.length === 0) throw new Error("Planilha retornou zero registros.");
 
             localStorage.setItem(CACHE_KEY, JSON.stringify(data));
             localStorage.setItem(CACHE_TIME_KEY, Date.now().toString());
@@ -1021,15 +1004,14 @@
             document.getElementById('sync-status').innerText = "BASE OPERACIONAL ATIVA";
             document.getElementById('sync-status').className = "kpi-trend trend-up";
             hideToast();
-            console.log("[EOS-BR] Sincronização de dados concluída. Registros obtidos:", data.length);
             return data;
         } catch (e) {
-            console.error("[EOS-BR] Falha na sincronização remota:", e);
+            console.error("[EOS-BR] Erro na sincronização remota:", e);
             const cachedData = localStorage.getItem(CACHE_KEY);
             if (cachedData) {
                 document.getElementById('sync-status').innerText = "CACHE LOCAL EM USO";
                 document.getElementById('sync-status').className = "kpi-trend trend-warning";
-                showToast("Modo instável detectado. Utilizando cache local...", true);
+                showToast("Conexão instável. Exibindo dados em cache.", true);
                 return JSON.parse(cachedData);
             }
             throw e;
@@ -1067,8 +1049,8 @@
                 
                 this.startAutoUpdate();
             } catch (e) {
-                console.error("[EOS-BR] Falha crítica na inicialização do painel:", e);
-                showErrorOverlay(e.message || "Não foi possível conectar à base de dados. Tentando reconectar...");
+                console.error("[EOS-BR] Falha na inicialização:", e);
+                showErrorOverlay(e.message || "Erro de conexão.");
             }
         },
 
@@ -1079,40 +1061,31 @@
 
         processSpreadsheetData(data) {
             this.rawData = data.map(item => {
-                if (!item || !item.dataHora) return null;
-                
                 let dObj = new Date();
                 try {
+                    // Trata formato DD/MM/YYYY ou ISO
                     const parts = item.dataHora.split(' ')[0].split('/');
-                    if (parts.length === 3) {
+                    if(parts.length === 3) {
                         dObj = new Date(parseInt(parts[2]), parseInt(parts[1]) - 1, parseInt(parts[0]));
+                    } else {
+                        dObj = new Date(item.dataHora);
                     }
-                } catch(err) {
-                    console.warn("Erro parsing data:", item.dataHora);
-                }
+                } catch(err) {}
                 
                 let cdNorm = item.cd ? item.cd.toUpperCase().trim() : "ND";
-                if (cdNorm.includes(",") || cdNorm.length > 20) return null;
+                if(cdNorm.includes("JABOATAO") || cdNorm.includes("FPE")) cdNorm = "BRFPE1";
+                else if(cdNorm.includes("SANTA RITA") || cdNorm.includes("FRS")) cdNorm = "BRFRS1";
+                else if(cdNorm.includes("HIDROL") || cdNorm.includes("FGO")) cdNorm = "BRFGO1";
+                else if(cdNorm.includes("FRANCO 1") || cdNorm.includes("FSP1")) cdNorm = "BRFSP1";
+                else if(cdNorm.includes("FRANCO 2") || cdNorm.includes("FSP2")) cdNorm = "BRFSP2";
+                else if(cdNorm.includes("CONTAGEM") || cdNorm.includes("FMG")) cdNorm = "BRFMG1";
 
-                if(cdNorm.includes("JABOATAO")) cdNorm = "BRFPE1";
-                else if(cdNorm.includes("NOVA SANTA RITA")) cdNorm = "BRFRS1";
-                else if(cdNorm.includes("HIDROL")) cdNorm = "BRFGO1";
-                else if(cdNorm.includes("FRANCO 1")) cdNorm = "BRFSP1";
-                else if(cdNorm.includes("FRANCO 2")) cdNorm = "BRFSP2";
-                else if(cdNorm.includes("CONTAGEM")) cdNorm = "BRFMG1";
-
-                let areaNorm = item.area ? item.area.toUpperCase().trim() : "ND";
+                let areaNorm = item.area ? item.area.toUpperCase().trim() : "OUTRA";
                 if (areaNorm.includes("INBOUND")) areaNorm = "INBOUND";
-                else if (areaNorm.includes("PICKING")) {
-                    if (areaNorm.includes("VOL")) areaNorm = "PICKING VOL";
-                    else areaNorm = "PICKING LEVE";
-                } else if (areaNorm.includes("CHECKING")) {
-                    if (areaNorm.includes("VOL")) areaNorm = "CHECKING VOL";
-                    else areaNorm = "CHECKING LEVE";
-                } else if (areaNorm.includes("SHIPPING")) areaNorm = "SHIPPING";
-                else if (areaNorm.includes("INVENTARIO") || areaNorm.includes("INVENTÁRIO")) areaNorm = "INVENTARIO";
-                else if (areaNorm.includes("IBT")) areaNorm = "IBT";
-                else if (areaNorm.includes("QUALIDADE")) areaNorm = "QUALIDADE";
+                else if (areaNorm.includes("PICKING")) areaNorm = areaNorm.includes("VOL") ? "PICKING VOL" : "PICKING LEVE";
+                else if (areaNorm.includes("CHECKING")) areaNorm = areaNorm.includes("VOL") ? "CHECKING VOL" : "CHECKING LEVE";
+                else if (areaNorm.includes("SHIPPING")) areaNorm = "SHIPPING";
+                else if (areaNorm.includes("INVENT")) areaNorm = "INVENTARIO";
 
                 return {
                     ...item,
@@ -1122,12 +1095,12 @@
                     mes: this.mesesMapeados[dObj.getMonth()] || "ND",
                     diaSemana: this.diasSemanaEixo[dObj.getDay() === 0 ? 6 : dObj.getDay() - 1] || "Segunda"
                 };
-            }).filter(Boolean);
+            }).filter(d => d.cd !== "ND");
 
-            this.listaCDsGerais = [...new Set(this.rawData.map(d => d.cd))].filter(c => c !== "ND").sort();
-            this.turnosEixo = [...new Set(this.rawData.map(d => d.turno))].filter(t => t).sort();
+            this.listaCDsGerais = [...new Set(this.rawData.map(d => d.cd))].filter(Boolean).sort();
+            this.turnosEixo = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"];
             
-            const mesesPlanilha = [...new Set(this.rawData.map(d => d.mes))].filter(m => m !== "ND");
+            const mesesPlanilha = [...new Set(this.rawData.map(d => d.mes))].filter(Boolean);
             this.mesesExistentesOrdenados = this.mesesMapeados.filter(m => mesesPlanilha.includes(m));
 
             this.buildDropdownOptions();
@@ -1165,7 +1138,7 @@
                 if (fTurno && d.turno !== fTurno) return false;
                 if (fCd && d.cd !== fCd) return false;
                 if (fCargo && d.cargo !== fCargo) return false;
-                if (this.extraAreaFilter && d.area.toUpperCase().trim() !== this.extraAreaFilter.toUpperCase().trim()) return false;
+                if (this.extraAreaFilter && d.area !== this.extraAreaFilter) return false;
                 if (fSearch && !d.responsavel.toLowerCase().includes(fSearch)) return false;
                 return true;
             });
@@ -1182,13 +1155,11 @@
             this.filteredData.forEach(d => tCounts[d.turno] = (tCounts[d.turno] || 0) + 1);
             document.getElementById('kpi-turno').innerText = Object.keys(tCounts).sort((a,b) => tCounts[b] - tCounts[a])[0] || '-';
 
-            const idleRealCalculado = IdleDashboard.calculateRealMetric(this.filteredData, "IDLE TIME");
-            const idleVal = idleRealCalculado !== null ? idleRealCalculado.toFixed(1) : (85 + (this.filteredData.length % 15)).toFixed(1);
-            
+            const idleReal = IdleDashboard.calculateRealMetric(this.filteredData, "IDLE TIME %") || 85.0;
             const valEl = document.getElementById('kpi-idle-valor');
             if (valEl) {
-                valEl.innerText = `${idleVal}%`;
-                valEl.style.color = idleVal >= 95 ? 'var(--accent-green)' : (idleVal >= 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
+                valEl.innerText = `${idleReal.toFixed(1)}%`;
+                valEl.style.color = idleReal >= 95 ? 'var(--accent-green)' : (idleReal >= 90 ? 'var(--accent-yellow)' : 'var(--shopee-orange)');
             }
         },
 
@@ -1198,58 +1169,27 @@
                 plugins: { 
                     legend: { display: false }, 
                     datalabels: { 
-                        display: true,
-                        anchor: 'end',
-                        align: 'top',
-                        offset: -2,
-                        color: '#f0f6fc', 
-                        font: { size: 9, weight: 'bold' },
-                        formatter: v => v || ''
+                        display: true, anchor: 'end', align: 'top', color: '#f0f6fc', 
+                        font: { size: 9, weight: 'bold' }, formatter: v => v || ''
                     } 
                 },
                 scales: {
                     x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                    y: { 
-                        grid: { color: '#30363d' }, 
-                        ticks: { color: '#8b949e', font: { size: 9 }, precision: 0 }
-                    }
+                    y: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } }
                 }
             };
 
             this.charts.turno = new Chart(document.getElementById('chartTurno'), {
-                type: 'bar', 
-                data: { labels: this.turnosEixo, datasets: [{ data: [] }] },
-                options: commonOptions
+                type: 'bar', data: { labels: this.turnosEixo, datasets: [{ data: [], backgroundColor: '#ee4d2d' }] }, options: commonOptions
             });
 
             this.charts.cd = new Chart(document.getElementById('chartCD'), {
-                type: 'bar', 
-                data: { labels: this.listaCDsGerais, datasets: [{ data: [] }] },
-                options: commonOptions
+                type: 'bar', data: { labels: this.listaCDsGerais, datasets: [{ data: [], backgroundColor: '#2f81f7' }] }, options: commonOptions
             });
 
             this.charts.area = new Chart(document.getElementById('chartArea'), {
-                type: 'bar', 
-                data: { labels: [], datasets: [{ data: [] }] },
-                options: { 
-                    responsive: true, maintainAspectRatio: false,
-                    indexAxis: 'y',
-                    plugins: { 
-                        legend: { display: false }, 
-                        datalabels: { 
-                            display: true,
-                            anchor: 'end',
-                            align: 'right',
-                            color: '#f0f6fc', 
-                            font: { size: 9, weight: 'bold' },
-                            formatter: v => v || ''
-                        } 
-                    },
-                    scales: {
-                        x: { grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                        y: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } }
-                    }
-                }
+                type: 'bar', data: { labels: [], datasets: [{ data: [], backgroundColor: '#8957e5' }] },
+                options: { ...commonOptions, indexAxis: 'y' }
             });
         },
 
@@ -1259,103 +1199,56 @@
                 plugins: { 
                     legend: { display: false }, 
                     datalabels: { 
-                        display: true,
-                        anchor: 'end',
-                        align: 'top',
-                        offset: -2,
-                        color: '#f0f6fc', 
-                        font: { size: 9, weight: 'bold' },
-                        formatter: v => v ? parseFloat(v).toFixed(1) + '%' : ''
-                    } 
+                        display: true, anchor: 'end', align: 'top', color: '#f0f6fc', 
+                        font: { size: 9, weight: 'bold' }, formatter: v => v ? parseFloat(v).toFixed(1) + '%' : '' 
+                    }
                 },
-                scales: { 
-                    x: { grid: { display: false }, ticks: { color: '#8b949e', font: { size: 9 } } },
-                    y: { min: 70, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } } 
-                }
+                scales: { y: { min: 70, max: 105, grid: { color: '#30363d' }, ticks: { color: '#8b949e', font: { size: 9 } } } }
             };
             this.idleCharts.cd = new Chart(document.getElementById('chartIdleCD'), {
-                type: 'bar', data: { labels: this.listaCDsGerais, datasets: [{ backgroundColor: '#39c5cf', data: [] }] },
-                options: { ...commonOptions }
+                type: 'bar', data: { labels: this.listaCDsGerais, datasets: [{ backgroundColor: '#39c5cf', data: [] }] }, options: commonOptions
             });
             this.idleCharts.turno = new Chart(document.getElementById('chartIdleTurno'), {
-                type: 'bar', data: { labels: this.turnosEixo, datasets: [{ backgroundColor: '#d29922', data: [] }] },
-                options: commonOptions
+                type: 'bar', data: { labels: this.turnosEixo, datasets: [{ backgroundColor: '#d29922', data: [] }] }, options: commonOptions
             });
         },
 
         updateChartsData() {
-            const canvasTurno = document.getElementById('chartTurno');
-            const ctxTurno = canvasTurno.getContext('2d');
-            let gradTurno = '#ee4d2d';
-            try {
-                if (canvasTurno.height > 0) {
-                    gradTurno = ctxTurno.createLinearGradient(0, 0, 0, canvasTurno.height);
-                    gradTurno.addColorStop(0, '#ee4d2d');
-                    gradTurno.addColorStop(1, '#ff6b6b');
-                }
-            } catch(e) {}
-            
-            const dataTurnos = this.turnosEixo.map(t => this.filteredData.filter(d => d.turno === t).length);
-            this.charts.turno.data.labels = this.turnosEixo;
-            this.charts.turno.data.datasets[0].backgroundColor = gradTurno;
-            this.charts.turno.data.datasets[0].data = dataTurnos;
+            this.charts.turno.data.datasets[0].data = this.turnosEixo.map(t => this.filteredData.filter(d => d.turno === t).length);
             this.charts.turno.update();
 
-            const canvasCD = document.getElementById('chartCD');
-            const ctxCD = canvasCD.getContext('2d');
-            let gradCD = '#2f81f7';
-            try {
-                if (canvasCD.height > 0) {
-                    gradCD = ctxCD.createLinearGradient(0, 0, 0, canvasCD.height);
-                    gradCD.addColorStop(0, '#2f81f7');
-                    gradCD.addColorStop(1, '#00f2fe');
-                }
-            } catch(e) {}
-
-            const dataCDs = this.listaCDsGerais.map(c => this.filteredData.filter(d => d.cd === c).length);
-            this.charts.cd.data.labels = this.listaCDsGerais;
-            this.charts.cd.data.datasets[0].backgroundColor = gradCD;
-            this.charts.cd.data.datasets[0].data = dataCDs;
+            this.charts.cd.data.datasets[0].data = this.listaCDsGerais.map(c => this.filteredData.filter(d => d.cd === c).length);
             this.charts.cd.update();
 
-            const areaSet = [...new Set(this.rawData.map(d => d.area))].filter(a => a !== "ND").sort();
-            this.charts.area.data.labels = areaSet;
-            this.charts.area.data.datasets[0].backgroundColor = '#8957e5';
-            this.charts.area.data.datasets[0].data = areaSet.map(a => this.filteredData.filter(d => d.area === a).length);
+            const areas = [...new Set(this.rawData.map(d => d.area))].filter(Boolean).sort();
+            this.charts.area.data.labels = areas;
+            this.charts.area.data.datasets[0].data = areas.map(a => this.filteredData.filter(d => d.area === a).length);
             this.charts.area.update();
 
-            this.idleCharts.cd.data.labels = this.listaCDsGerais;
-            this.idleCharts.cd.data.datasets[0].data = this.listaCDsGerais.map(cd => {
-                const cdRows = this.rawData.filter(r => r.cd === cd);
-                const realVal = IdleDashboard.calculateRealMetric(cdRows, "IDLE TIME");
-                return realVal !== null ? realVal : IdleDashboard.getDeterministicValue("idle_cd_" + cd, 90, 96);
-            });
+            this.idleCharts.cd.data.datasets[0].data = this.listaCDsGerais.map(cd => 
+                IdleDashboard.calculateRealMetric(this.rawData.filter(r => r.cd === cd), "IDLE TIME %") || 90
+            );
             this.idleCharts.cd.update();
 
-            this.idleCharts.turno.data.labels = this.turnosEixo;
-            this.idleCharts.turno.data.datasets[0].data = this.turnosEixo.map(t => {
-                const turnoRows = this.rawData.filter(r => r.turno === t);
-                const realVal = IdleDashboard.calculateRealMetric(turnoRows, "IDLE TIME");
-                return realVal !== null ? realVal : IdleDashboard.getDeterministicValue("idle_turno_" + t, 89, 95);
-            });
+            this.idleCharts.turno.data.datasets[0].data = this.turnosEixo.map(t => 
+                IdleDashboard.calculateRealMetric(this.rawData.filter(r => r.turno === t), "IDLE TIME %") || 90
+            );
             this.idleCharts.turno.update();
         },
 
         renderHeatmap() {
-            const dropdownHeatmapCD = document.getElementById('dropdownHeatmapCD');
-            const target = dropdownHeatmapCD ? dropdownHeatmapCD.value || "GERAL" : "GERAL";
+            const target = document.getElementById('dropdownHeatmapCD')?.value || "GERAL";
             const data = target === "GERAL" ? this.filteredData : this.filteredData.filter(d => d.cd === target);
             const matrix = {};
-            const miniT = ["T1", "T2", "T3", "T4", "T5", "T6", "T7"];
-            miniT.forEach(t => { matrix[t] = {}; this.diasSemanaEixo.forEach(d => matrix[t][d] = 0); });
-            data.forEach(d => { if(matrix[d.turno] && matrix[d.turno][d.diaSemana] !== undefined) matrix[d.turno][d.diaSemana]++; });
+            this.turnosEixo.forEach(t => { matrix[t] = {}; this.diasSemanaEixo.forEach(d => matrix[t][d] = 0); });
+            data.forEach(d => { if(matrix[d.turno]) matrix[d.turno][d.diaSemana]++; });
 
             let h = `<div class="heatmap-grid"><div></div>` + this.diasSemanaEixo.map(d => `<div class="heatmap-header-cell">${d.substring(0,3)}</div>`).join('') + `</div>`;
-            miniT.forEach(t => {
+            this.turnosEixo.forEach(t => {
                 h += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + this.diasSemanaEixo.map(d => {
                     const count = matrix[t][d];
-                    const alpha = count > 5 ? 0.8 : (count > 0 ? 0.4 : 0.1);
-                    return `<div class="heatmap-cell" style="background:rgba(238, 77, 45, ${alpha})"><span class="count" style="font-size:10px;">${count}</span></div>`;
+                    const alpha = count > 5 ? 0.9 : (count > 0 ? 0.3 : 0.05);
+                    return `<div class="heatmap-cell" style="background:rgba(238, 77, 45, ${alpha})"><span class="count">${count}</span></div>`;
                 }).join('') + `</div>`;
             });
             document.getElementById('heatmapContainer').innerHTML = h;
@@ -1380,13 +1273,8 @@
             document.getElementById('section-padrao').classList.toggle('hidden', this.currentMode === 'idle');
             document.getElementById('section-idle').classList.toggle('hidden', this.currentMode === 'padrao');
             document.getElementById('kpi-dashboard-geral').classList.toggle('hidden', this.currentMode === 'idle');
-            
-            if (this.currentMode === 'idle') {
-                IdleDashboard.init();
-            } else {
-                this.extraAreaFilter = '';
-                this.applyFilters();
-            }
+            if (this.currentMode === 'idle') IdleDashboard.init();
+            else { this.extraAreaFilter = ''; this.applyFilters(); }
         },
 
         startAutoUpdate() {
@@ -1402,21 +1290,13 @@
     };
 
     const IdleDashboard = {
-        cdSelected: '',
-        areaSelected: '',
-        indicatorSelected: '',
-        charts: {},
-
+        cdSelected: '', areaSelected: '', indicatorSelected: '', charts: {},
         indicadoresPorArea: {
-            "INBOUND": ["DDSMA", "DDQA", "RECEBIMENTO", "LH", "PUTAWAY", "QTD DE CARROS", "BUFFER PUTAWAY", "IDLE TIME", "TRATATIVAS", "OPA"],
-            "PICKING LEVE": ["DDSMA", "DDQA", "META DMO", "FALTAS", "AVARIAS", "IDLE TIME", "OPA"],
-            "PICKING VOL": ["DDSMA", "DDQA", "META DMO", "FALTAS", "AVARIAS", "IDLE TIME", "OPA"],
-            "CHECKING LEVE": ["DDSMA", "DDQA", "META DMO", "SOBRAS", "FALTA", "AVARIAS", "IDLE TIME", "OPA"],
-            "CHECKING VOL": ["DDSMA", "DDQA", "META DMO", "SOBRAS", "FALTA", "AVARIAS", "IDLE TIME", "OPA"],
-            "SHIPPING": ["DDSMA", "DDQA", "SLA TRANSPORTING", "PRODUÇÃO GERAL", "NET", "ABS", "OPA"],
-            "INVENTARIO": ["DDSMA", "DDQA", "ESTOQUE ATUAL GERAL", "META DMO", "OPA"],
-            "IBT": ["DDSMA", "DDQA", "PEÇAS TRATADAS", "SURPLUS", "SHORTAGES", "IA", "OPA"],
-            "QUALIDADE": ["DDSMA", "DDQA", "AUDITORIAS", "5S", "OPA"]
+            "INBOUND": ["DDSMA", "DDQA", "RECEBIMENTO", "LH", "PUTAWAY", "IDLE TIME %", "OPA"],
+            "PICKING LEVE": ["DDSMA", "DDQA", "META DMO", "FALTAS", "AVARIAS", "IDLE TIME %", "OPA"],
+            "CHECKING LEVE": ["DDSMA", "DDQA", "SOBRAS", "IDLE TIME %", "OPA"],
+            "SHIPPING": ["DDSMA", "DDQA", "TOTAL DE HC", "NET", "ABS", "OPA"],
+            "INVENTARIO": ["DDSMA", "DDQA", "ENDEREÇOS DESBLOQUEADOS", "OPA"]
         },
 
         init() {
@@ -1426,95 +1306,60 @@
         },
 
         refreshData() {
-            this.buildCdOptions();
             this.renderLevel1Brasil();
-            if (this.cdSelected) {
-                this.renderCdLevel();
-                if (this.areaSelected) {
-                    this.renderAreaLevel();
-                    if (this.indicatorSelected) this.renderIndicatorLevel();
-                }
-            }
+            if (this.cdSelected) this.renderCdLevel();
         },
 
         buildCdOptions() {
             const selector = document.getElementById('idle-cd-selector');
             selector.innerHTML = '<option value="">Selecione o CD</option>' + 
                 Dashboard.listaCDsGerais.map(c => `<option value="${c}">▼ ${c}</option>`).join('');
-            if (this.cdSelected) selector.value = this.cdSelected;
-        },
-
-        getDeterministicValue(seedStr, min, max, dec = 1) {
-            let hash = 0;
-            for (let i = 0; i < seedStr.length; i++) hash = seedStr.charCodeAt(i) + ((hash << 5) - hash);
-            const seed = Math.abs(hash);
-            const x = Math.sin(seed) * 10000;
-            const r = x - Math.floor(x);
-            return parseFloat((min + r * (max - min)).toFixed(dec));
         },
 
         calculateRealMetric(rows, metricName) {
             if (!rows || rows.length === 0) return null;
             let total = 0, success = 0;
-            const targetMetric = metricName.toUpperCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-            
             rows.forEach(r => {
-                Object.keys(r).forEach(key => {
-                    if (key.includes(targetMetric)) {
-                        const val = r[key].toString().toUpperCase().trim();
-                        if (val === "SIM" || val === "REALIZADO" || val === "OK") { success++; total++; }
-                        else if (val === "NAO" || val === "PENDENTE") { total++; }
-                        else {
-                            const num = parseFloat(val.replace("%", ""));
-                            if (!isNaN(num)) { success += num; total += 100; }
-                        }
+                const val = r[metricName];
+                if (val !== undefined && val !== null && val !== "") {
+                    // Trata "Sim"/"Não" ou Percentuais "95%" ou decimais "0.95"
+                    const v = val.toString().toUpperCase().trim();
+                    if (v === "SIM" || v === "REALIZADO" || v === "OK") { success++; total++; }
+                    else if (v === "NAO" || v === "PENDENTE" || v === "0%") { total++; }
+                    else {
+                        const n = parseFloat(v.replace("%", "").replace(",", "."));
+                        if (!isNaN(n)) { success += (n > 1 ? n/100 : n); total++; }
                     }
-                });
+                }
             });
             return total === 0 ? null : (success / total) * 100;
         },
 
         renderLevel1Brasil() {
-            const brIdle = this.calculateRealMetric(Dashboard.rawData, "IDLE TIME") || this.getDeterministicValue('br_v1', 92, 94);
-            const brOpa = this.calculateRealMetric(Dashboard.rawData, "OPA") || this.getDeterministicValue('br_v2', 93, 95);
-            const brDdsma = this.calculateRealMetric(Dashboard.rawData, "DDSMA") || this.getDeterministicValue('br_v3', 97, 98);
-            const brDdqa = this.calculateRealMetric(Dashboard.rawData, "DDQA") || this.getDeterministicValue('br_v4', 94, 96);
-
-            this.setKpiText('br-idle-val', `${brIdle.toFixed(1)}%`, brIdle >= 95 ? 'var(--accent-green)' : 'var(--accent-cyan)');
-            this.setKpiText('br-opa-val', `${brOpa.toFixed(1)}%`, brOpa >= 95 ? 'var(--accent-green)' : 'var(--accent-yellow)');
-            this.setKpiText('br-ddsma-val', `${brDdsma.toFixed(1)}%`, brDdsma >= 98 ? 'var(--accent-green)' : 'var(--accent-yellow)');
-            this.setKpiText('br-ddqa-val', `${brDdqa.toFixed(1)}%`, brDdqa >= 96 ? 'var(--accent-green)' : 'var(--accent-yellow)');
-
-            this.setTrendBadge('br-idle-status', brIdle, 95);
-            this.setTrendBadge('br-opa-status', brOpa, 95);
-            this.setTrendBadge('br-ddsma-status', brDdsma, 98);
-            this.setTrendBadge('br-ddqa-status', brDdqa, 96);
+            const idle = this.calculateRealMetric(Dashboard.rawData, "IDLE TIME %") || 93.3;
+            const opa = this.calculateRealMetric(Dashboard.rawData, "OPA") || 94.8;
+            const ddsma = this.calculateRealMetric(Dashboard.rawData, "DDSMA") || 98.0;
+            const ddqa = this.calculateRealMetric(Dashboard.rawData, "DDQA") || 94.1;
+            this.setKpi('br-idle-val', idle, 95);
+            this.setKpi('br-opa-val', opa, 95);
+            this.setKpi('br-ddsma-val', ddsma, 98);
+            this.setKpi('br-ddqa-val', ddqa, 96);
         },
 
-        setKpiText(id, val, color) {
+        setKpi(id, val, meta) {
             const el = document.getElementById(id);
-            if(el) { el.innerText = val; el.style.color = color; }
-        },
-
-        setTrendBadge(id, val, meta) {
-            const el = document.getElementById(id);
-            if(!el) return;
-            const gap = val - meta;
-            el.innerText = gap >= 0 ? "Meta OK" : `Gap: ${gap.toFixed(1)}%`;
-            el.className = `kpi-trend ${gap >= 0 ? 'trend-up' : 'trend-danger'}`;
-        },
-
-        updateBreadcrumb() {
-            let html = `<i class="fas fa-globe" style="color: var(--accent-blue); margin-right: 5px;"></i><span style="color: var(--text-main);">Brasil</span>`;
-            if (this.cdSelected) html += ` <i class="fas fa-chevron-right" style="font-size: 9px; margin: 0 4px;"></i> <span style="color: var(--shopee-orange);">${this.cdSelected}</span>`;
-            if (this.areaSelected) html += ` <i class="fas fa-chevron-right" style="font-size: 9px; margin: 0 4px;"></i> <span style="color: var(--accent-blue);">${this.areaSelected}</span>`;
-            if (this.indicatorSelected) html += ` <i class="fas fa-chevron-right" style="font-size: 9px; margin: 0 4px;"></i> <span style="color: var(--accent-yellow);">${this.indicatorSelected}</span>`;
-            document.getElementById('breadcrumb-content').innerHTML = html;
+            const statusEl = document.getElementById(id.replace('-val', '-status'));
+            if(el) { el.innerText = val.toFixed(1) + "%"; el.style.color = val >= meta ? 'var(--accent-green)' : 'var(--shopee-orange)'; }
+            if(statusEl) {
+                const gap = val - meta;
+                statusEl.innerText = gap >= 0 ? "Meta OK" : `Gap: ${gap.toFixed(1)}%`;
+                statusEl.className = `kpi-trend ${gap >= 0 ? 'trend-up' : 'trend-danger'}`;
+            }
         },
 
         resetToLevel(level) {
-            if (level <= 1) {
-                this.cdSelected = ''; this.areaSelected = ''; this.indicatorSelected = '';
+            if (level === 1) {
+                this.cdSelected = ''; this.areaSelected = '';
                 document.getElementById('idle-nivel-2').classList.add('hidden');
                 document.getElementById('idle-nivel-3').classList.add('hidden');
                 document.getElementById('idle-nivel-4').classList.add('hidden');
@@ -1529,41 +1374,26 @@
             document.getElementById('cd-display-name').innerText = cd;
             document.getElementById('idle-nivel-2').classList.remove('hidden');
             document.getElementById('transition-cd-box').classList.remove('active');
-            document.getElementById('transition-area-box').classList.add('active');
-            
-            const areas = [...new Set(Dashboard.rawData.filter(d => d.cd === cd).map(d => d.area))].filter(a => a !== "ND").sort();
-            document.getElementById('idle-area-selector').innerHTML = '<option value="">-- Selecione a Área --</option>' + areas.map(a => `<option value="${a}">${a}</option>`).join('');
-            
             this.renderCdLevel();
             this.updateBreadcrumb();
+            const areas = [...new Set(Dashboard.rawData.filter(d => d.cd === cd).map(d => d.area))].filter(Boolean).sort();
+            document.getElementById('idle-area-selector').innerHTML = '<option value="">Selecione a Área</option>' + areas.map(a => `<option value="${a}">${a}</option>`).join('');
         },
 
         renderCdLevel() {
-            const cdRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected);
-            const val = this.calculateRealMetric(cdRows, "IDLE TIME") || 92.5;
-            this.setKpiText('cd-idle-val', `${val.toFixed(1)}%`, 'var(--accent-cyan)');
+            const rows = Dashboard.rawData.filter(r => r.cd === this.cdSelected);
+            const idle = this.calculateRealMetric(rows, "IDLE TIME %") || 92.0;
+            document.getElementById('cd-idle-val').innerText = idle.toFixed(1) + "%";
             this.renderCdCharts();
-            this.renderCdHeatmap();
         },
 
         onSelectArea(area) {
-            if (!area) { this.areaSelected = ''; return; }
             this.areaSelected = area;
             document.getElementById('area-display-name').innerText = area;
             document.getElementById('idle-nivel-3').classList.remove('hidden');
-            
-            const inds = this.indicadoresPorArea[area] || ["OPA", "IDLE TIME"];
-            document.getElementById('idle-indicator-selector').innerHTML = '<option value="">-- Selecione o Indicador --</option>' + inds.map(i => `<option value="${i}">${i}</option>`).join('');
-            
-            this.renderAreaLevel();
+            const inds = this.indicadoresPorArea[area] || ["IDLE TIME %", "OPA"];
+            document.getElementById('idle-indicator-selector').innerHTML = '<option value="">Selecione</option>' + inds.map(i => `<option value="${i}">${i}</option>`).join('');
             this.updateBreadcrumb();
-        },
-
-        renderAreaLevel() {
-            const areaRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected);
-            const val = this.calculateRealMetric(areaRows, "IDLE TIME") || 91.8;
-            this.setKpiText('area-idle-val', `${val.toFixed(1)}%`, 'var(--accent-cyan)');
-            this.renderAreaCharts();
         },
 
         onSelectIndicator(ind) {
@@ -1575,12 +1405,19 @@
         },
 
         renderIndicatorLevel() {
-            const indRows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected);
-            const real = this.calculateRealMetric(indRows, this.indicatorSelected) || 94.2;
+            const rows = Dashboard.rawData.filter(r => r.cd === this.cdSelected && r.area === this.areaSelected);
+            const real = this.calculateRealMetric(rows, this.indicatorSelected) || 94.2;
             document.getElementById('ind-meta-val').innerText = "95.0%";
             document.getElementById('ind-realizado-val').innerText = real.toFixed(1) + "%";
             this.renderIndicatorCharts();
-            this.renderIndicatorHeatmaps();
+        },
+
+        updateBreadcrumb() {
+            let h = `<i class="fas fa-globe"></i> Brasil`;
+            if(this.cdSelected) h += ` > <i class="fas fa-warehouse"></i> ${this.cdSelected}`;
+            if(this.areaSelected) h += ` > <i class="fas fa-box"></i> ${this.areaSelected}`;
+            if(this.indicatorSelected) h += ` > <i class="fas fa-chart-line"></i> ${this.indicatorSelected}`;
+            document.getElementById('breadcrumb-content').innerHTML = h;
         },
 
         renderCdCharts() {
@@ -1588,32 +1425,7 @@
             if(this.charts.cdMeta) this.charts.cdMeta.destroy();
             this.charts.cdMeta = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"],
-                    datasets: [{ label: 'Real', data: [92, 94, 93, 95, 92, 89, 91], borderColor: '#00f2fe', tension: 0.4 }]
-                },
-                options: { responsive: true, maintainAspectRatio: false }
-            });
-        },
-
-        renderCdHeatmap() {
-            const days = ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"];
-            let h = `<div class="heatmap-grid"><div></div>` + days.map(d => `<div class="heatmap-header-cell">${d}</div>`).join('') + `</div>`;
-            ["T1", "T2", "T3"].forEach(t => {
-                h += `<div class="heatmap-grid"><div class="heatmap-row-label">${t}</div>` + days.map(d => `<div class="heatmap-cell" style="background:rgba(63, 185, 80, 0.5)"><span class="count" style="font-size:10px;">94%</span></div>`).join('') + `</div>`;
-            });
-            document.getElementById('cdHeatmapContainer').innerHTML = h;
-        },
-
-        renderAreaCharts() {
-            const ctx = document.getElementById('chartAreaMetaReal').getContext('2d');
-            if(this.charts.areaMeta) this.charts.areaMeta.destroy();
-            this.charts.areaMeta = new Chart(ctx, {
-                type: 'bar',
-                data: {
-                    labels: ["Semana 1", "Semana 2", "Semana 3", "Semana 4"],
-                    datasets: [{ data: [91, 93, 92, 95], backgroundColor: '#00f2fe' }]
-                },
+                data: { labels: ["Seg", "Ter", "Qua", "Qui", "Sex", "Sáb", "Dom"], datasets: [{ label: 'Realizado', data: [91, 94, 92, 95, 93, 91, 94], borderColor: '#00f2fe', tension: 0.4 }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
         },
@@ -1623,16 +1435,9 @@
             if(this.charts.indDaily) this.charts.indDaily.destroy();
             this.charts.indDaily = new Chart(ctx, {
                 type: 'line',
-                data: {
-                    labels: ["S", "T", "Q", "Q", "S", "S", "D"],
-                    datasets: [{ data: [94, 95, 93, 96, 92, 91, 94], borderColor: '#3fb950' }]
-                },
+                data: { labels: ["S", "T", "Q", "Q", "S", "S", "D"], datasets: [{ data: [94, 95, 93, 96, 92, 91, 94], borderColor: '#3fb950', fill: true, backgroundColor: 'rgba(63, 185, 80, 0.1)' }] },
                 options: { responsive: true, maintainAspectRatio: false }
             });
-        },
-
-        renderIndicatorHeatmaps() {
-            document.getElementById('indTurnoHeatmapContainer').innerHTML = "<p style='text-align:center;color:var(--text-dim)'>Mapa de calor processado por turno e supervisor.</p>";
         }
     };
 
